@@ -1,0 +1,9 @@
+﻿turbineType;hubHeight;diameter;power;specPower;specArea;variant;costs;referenceFiveYears
+turbineType1;72;53;800;0.36;2.76;strong;1047.03;12198409.6
+turbineType2;139;121;2530;0.22;4.55;low;1571.55;39657766.15
+turbineType3;109;92;2350;0.35;2.83;strong;1155.25;38784703
+turbineType4;142;114;3170;0.31;3.22;low;1290.11;53793023.76
+turbineType5;110;109;3000;0.32;3.11;low;1169.85;55534482
+turbineType6;150;140;4000;0.26;3.85;low;1573.2;63884397.91
+turbineType7;120;124;4500;0.37;2.68;strong;1363.2;71439570
+turbineType8;120;140;6000;0.39;2.57;strong;1483.2;87556109.95
