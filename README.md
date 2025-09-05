@@ -1,4 +1,4 @@
-# The future spatial distribution of onshore wind energy capacity based on a probabilistic investment calculus
+# The impact of investor choices on the future spatial development of onshore wind energy
 
 **RegioInvest Wind** is a MATLAB-based model for simulating regional wind power deployment in Germany. The model projects future capacity expansions across NUTS-3 regions and turbine types under different allocation strategies and regulatory setting.
 The model supports scenario-based energy system analysis and policy evaluation. It integrates geospatial constraints, investment economics, and historical turbine data. Key use cases include
