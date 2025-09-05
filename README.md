@@ -81,4 +81,4 @@ House of Energy, Climate and Finance
 
 yannik.pflugfelder@uni-due.de
 
- 
+Code is licensed under MIT. Data files are subject to their respective original licenses.
