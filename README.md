@@ -27,6 +27,9 @@ The following datasets are required:
 Source: https://www.marktstammdatenregister.de (accessed on 24.03.2025).  
 © Bundesnetzagentur. The data are publicly available and may be reused in accordance with §111e EnWG.  
 Modifications: [Filtered for Wind Turbines in Germany with commission date before 01.01.2025].
+- Source: https://www.govdata.de/dl-de/by-2-0
+- License: Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)
+- Changes: Data cleaned, filtered, and aggregated by the authors
 
 * **ERA5 Weather Data (not redistributed)**
   - Source: Copernicus Climate Data Store (CDS), DOI: https://doi.org/10.24381/cds.adbb2d47
@@ -41,6 +44,7 @@ Modifications: [Filtered for Wind Turbines in Germany with commission date befor
 
 * **Power Curve Data (included)**
   * CSV or MATLAB file with power curves per turbine type
+  * based on Pöstges, A. & Weber, C. (2023). Identifying key elements for adequate simplifications of investment choices – The case of wind energy expansion. Energy Economics, 120, 106534. https://doi.org/10.1016/j.eneco.2023.106534
 
 * **Geodata (included)**
   * NUTS-3 region polygons and centroids © European Union, 2021 — GISCO, NUTS 2021 boundaries and points. Licensed under CC BY 4.0.  
