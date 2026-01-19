@@ -125,7 +125,7 @@ switch paraExpansionCase
         end
         
         % 3. Calculate Net Present Value (NPV) of each turbine-region combination
-        [regioWindOnshore.netPresentValue] = calcNetPresentValue( ...
+        [regioWindOnshore.netPresentValue, ~,~] = calcNetPresentValue( ...
             regioWindOnshore.investCost, ...
             regioWindOnshore.production, ...
             paraTurbineLifetime, ...
@@ -198,6 +198,10 @@ switch paraExpansionCase
         paraTech.paraPowerPotential_invest = paraPowerPotential_invest;
         paraTech.paraPowerPotential = paraPowerPotential;
         
+        % When to use linearized RefYield Model, activate this line
+        if optsRegioInvest.RefYieldLinearized
+            regioWindOnshore.compensationFactor = calcTurbineCompensationFactor2(regioWindOnshore);
+        end
         % Reset compensation factor if reference yield model not used in investment
         if ~optsRefYieldInInvestment
             regioWindOnshore.compensationFactor(:) = 1;
@@ -213,7 +217,7 @@ switch paraExpansionCase
                 optsNpvAdjust, ...
                 optsRefYieldInInvestment, ...
                 paraOPEXfix, ...
-                paraOPEXperkWhvar, paraRegioInvest);
+                paraOPEXperkWhvar, paraRegioInvest, optsRegioInvest);
     case 2  % Case 2: Allocation proportional to existing capacity
     
         %% === Step 1: Scale current capacity to match scenario target ===
@@ -1111,6 +1115,75 @@ function outputCompensationFactor = calcTurbineCompensationFactor(inpPastInvestm
     outputCompensationFactor = localCompensationFactor;
 
 end
+%% FUNCTION COMPENSATINO FACTOR 2
+%% FUNCTION CALCTURBINECOMPENSATIONFACTOR (LINEAR VERSION)
+function outputCompensationFactor = calcTurbineCompensationFactor2( ...
+    inpPastInvestments, optsUniqueRefYieldPerRegion)
+
+    % Copy input to local variable
+    windparkLocal = inpPastInvestments;
+
+    % === 1. Relative production compared to reference ====================
+    referenceFactor = windparkLocal.production ./ windparkLocal.referenceProduction;
+
+    % === 2. Set compensation factor to 1 for non-German turbines ==========
+    idxNonDE = ~contains(windparkLocal.nutsID, 'DE');
+    referenceFactor(idxNonDE) = 1;
+
+    % === 3. Define German southern NUTS3 regions (unchanged) ==============
+    NUTS3_Suedregion = { ...
+        'DE145','DE121','DE146','DE112','DE147','DE132','DE12A','DE133','DE12B','DE113', ...
+        'DE131','DE12C','DE114','DE125','DE11C','DE117','DE118','DE119','DE122','DE123', ...
+        'DE138','DE139','DE115','DE11B','DE126','DE127','DE11D','DE129','DE124','DE148', ...
+        'DE116','DE141','DE128','DE135','DE11A','DE136','DE149','DE111','DE142','DE137', ...
+        'DE144','DE13A','DE143','DE275','DE214','DE231','DE234','DE251','DE256','DE261', ...
+        'DE264','DE271','DE276','DE216','DE241','DE245','DE242','DE246','DE215','DE235', ...
+        'DE217','DE224','DE277','DE22C','DE27D','DE218','DE219','DE21A','DE252','DE257', ...
+        'DE248','DE21B','DE225','DE21C','DE253','DE258','DE21D','DE278','DE267','DE211', ...
+        'DE272','DE226','DE273','DE268','DE21E','DE221','DE227','DE27A','DE26A','DE274', ...
+        'DE21F','DE269','DE21G','DE212','DE21H','DE21I','DE236','DE25A','DE237','DE279', ...
+        'DE254','DE259','DE27E','DE27B','DE222','DE228','DE21J','DE229','DE232','DE238', ...
+        'DE213','DE21K','DE25B','DE22A','DE255','DE239','DE262','DE26B','DE21L','DE223', ...
+        'DE22B','DE23A','DE21M','DE27C','DE233','DE21N','DE25C','DE263','DE26C','DE715', ...
+        'DE711','DE716','DE717','DE71B','DE71C','DEB3B','DEB3C','DEB14','DEB22','DEB15', ...
+        'DEB3D','DEB23','DEB31','DEB3E','DEB32','DEB3F','DEB3G','DEB33','DEB34','DEB35', ...
+        'DEB3J','DEB36','DEB37','DEB1D','DEB3I','DEB38','DEB3H','DEB3K','DEB21','DEB25', ...
+        'DEB39','DEB3A','DEC02','DEC03','DEC01','DEC04','DEC05','DEC06' ...
+    };
+
+    in_sued = ismember(windparkLocal.nutsID, NUTS3_Suedregion);
+
+    % === 4. Linear reference-yield schedule (x–y formulation) ============
+    % Reference-yield grid
+    x = [0.05 0.50 0.60 0.70 0.80 0.90 1.00 1.10 1.20 1.30 1.40 1.50 3 5];
+
+    % Fix left and reference points
+    x_left = 0.50;  y_left = 1.55;
+    x_ref  = 1.00;  y_ref  = 1.00;
+
+    % Linear slope
+    slope = (y_ref - y_left) / (x_ref - x_left);
+
+    % Linear y-values
+    y = y_left + slope .* (x - x_left);
+
+    % % Optional lower bound to avoid extreme penalties
+    % y = max(y, 0.70);
+    % 
+    % === 5. Clamp reference factors by region (as in original) ===========
+    % referenceFactor(in_sued)  = max(referenceFactor(in_sued), 0.50);
+    % referenceFactor(~in_sued) = max(referenceFactor(~in_sued), 0.60);
+    % referenceFactor = min(referenceFactor, max(x));
+
+    % === 6. Interpolate compensation factor ==============================
+    localCompensationFactor = interp1(x, y, referenceFactor);
+
+    % === 8. Return result ================================================
+    outputCompensationFactor = localCompensationFactor;
+
+
+end
+
 
 %% FUNCTION ESTIMATEDISCRETECHOICEMODEL
 function choiceParameter = estimateDiscreteChoiceModel(inpInvestments, inpChoiceModelInput)

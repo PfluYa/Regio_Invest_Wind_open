@@ -4,7 +4,7 @@
 % and land-use restrictions._
 %
 % Note on input data:
-% Locate the INPUT DATA at XXXXX. Unpack ZIP File in the Input_Data Folder
+% Locate the INPUT DATA at corresponding path. Unpack ZIP File in the Input_Data Folder
 
 %% --- User-defined local path ---
 userpath = 'C:\Users\Yannik.Pflugfelder\Documents\Github'; % Change this to your local path if necessary
@@ -51,10 +51,12 @@ baseTableRegioInvest = getSpacePotential(baseTableRegioInvest);
 %% --- Wind Onshore Model Settings ---
 
 optsRegioInvest.windOnshoreReferenceYieldModel = true;    % Apply reference yield model
-optsRegioInvest.uniqueRefYieldperRegion = false;           % Take same ref yield (from type 4) for all types within a region
+optsRegioInvest.uniqueRefYieldperRegion = false;          % Take same ref yield (from type 4) for all types within a region
 optsRegioInvest.RefYieldInInvestment = true;              % Include yield correction in investment decision
+optsRegioInvest.RefYieldLinearized = false;
 optsRegioInvest.windOnshoreYieldCorrectionYP = true;     % Alternative correction approach (experimental)
 optsRegioInvest.windOnshoreMethodology = 'binomialNestedLogit';
+optsRegioInvest.iterationLogicInvestment = 'energy';    % 'capacity' or 'energy'
 
 % Explanatory variable for the discrete choice model
 optsRegioInvest.windOnshoreExplanatoryVariable = {'netPresentValue'};
@@ -64,6 +66,7 @@ optsRegioInvest.windOnshoreExplainedVariable = {'relativeUsedWindSpaceDcm'};
 % Scaling settings for regional area allocation
 optsRegioInvest.scalingAreaParameter = 'UB21';            % Calibrate to 2021 designated areas (UB21, Bons et al.)
 optsRegioInvest.scalingAreaInvest = 'WindBG';             % WindBG law target (2% land area by 2032)
+% optsRegioInvest.scalingAreaInvest = 'none';             % for case 4, only optimizing
 
 % Future assumptions about power potential
 optsRegioInvest.powerPotential_increase = true;           % Allow higher density in future years
@@ -84,8 +87,31 @@ paraRegioInvest.costReductionRate = 0.0238;               % % Apply cost reducti
 disp('Calculating Investments Wind Onshore ...')
 [resultsWindOnshoreTurbinesUnstack, regioDataWind] = calcRegioInvestWindOnshore();
 
+%%%%%%%%%%%%%%%% For analysis with diff refYields %%%%%%%%%%%%%%%%%%%%%%%
+% === 1. Extract NUTS1 codes from NUTS3 =================================
+nuts1_with    = cellfun(@(x) x(1:3), regioDataWind.nutsID,    'UniformOutput', false);
+nuts1_with    = string(nuts1_with);
+% === 2. Define cluster regions =========================================
+southStates   = ["DE1", "DE2"];
+neutralStates = ["DEB", "DEC", "DE7", "DEG"];
+% === 3. Assign clusters to NUTS1 regions ===============================
+cluster_with    = repmat("North", height(regioDataWind), 1);
+
+cluster_with(ismember(nuts1_with, southStates))   = "South";
+cluster_with(ismember(nuts1_with, neutralStates)) = "Neutral";
+
+regioDataWind.Cluster    = categorical(cluster_with);
+
+% === 4. Aggregate total capacity per cluster ===========================
+sum_with    = groupsummary(regioDataWind,    "Cluster", "sum", "capacityTotal");
+sum_with.Properties.VariableNames(end)    = "regioDataWind";
+% === 6. Display result =================================================
+disp(sum_with)
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %% Plot results
-%plot_results(resultsWindOnshoreTurbinesUnstack, regioDataWind);
+plot_results(resultsWindOnshoreTurbinesUnstack, regioDataWind);
 
 %% Save Results
 current_date = datestr(now, 'yyyy-mm-dd');
