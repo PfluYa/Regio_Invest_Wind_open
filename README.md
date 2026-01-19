@@ -24,12 +24,12 @@ The following datasets are required:
 
 * **Turbine Data (MaStR)**
   * This repository includes data derived from the Marktstammdatenregister of the German Federal Network Agency (Bundesnetzagentur).  
-Source: https://www.marktstammdatenregister.de (accessed on 24.03.2025).  
-© Bundesnetzagentur. The data are publicly available and may be reused in accordance with §111e EnWG.  
-Modifications: [Filtered for Wind Turbines in Germany with commission date before 01.01.2025].
- * Source: https://www.govdata.de/dl-de/by-2-0
- * License: Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)
- * Changes: Data cleaned, filtered, and aggregated by the authors
+    Source: https://www.marktstammdatenregister.de (accessed on 24.03.2025).  
+    © Bundesnetzagentur. The data are publicly available and may be reused in accordance with §111e EnWG.  
+    Modifications: [Filtered for Wind Turbines in Germany with commission date before 01.01.2025].
+  * Source: https://www.govdata.de/dl-de/by-2-0
+  * License: Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)
+  * Changes: Data cleaned, filtered, and aggregated by the authors
 
 * **ERA5 Weather Data (not redistributed)**
    * Source: Copernicus Climate Data Store (CDS), DOI: https://doi.org/10.24381/cds.adbb2d47
