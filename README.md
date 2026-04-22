@@ -182,8 +182,21 @@ This dataset includes:
 
 ## License
 
-- Code: MIT License  
-- Data: subject to the original data providers and their respective licenses  
+The source code in this repository is licensed under the MIT License.
+
+Input data are subject to their respective original licenses:
+
+- MaStR (Marktstammdatenregister):  
+  Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)
+
+- ERA5 weather data:  
+  Copernicus Climate Data Store (CDS) license  
+  (not redistributed in this repository)
+
+- Geospatial data (NUTS regions):  
+  © European Union, GISCO — licensed under CC BY 4.0
+
+Users are responsible for complying with the respective data licenses when using external datasets.
 
 ---
 
