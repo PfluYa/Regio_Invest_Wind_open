@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+title: "RegioInvest Wind: A model for regional onshore wind investment in Germany"
+message: "If you use this code, please cite the associated paper and this software."
+type: software
+
+authors:
+  - family-names: "Pflugfelder"
+    given-names: "Yannik"
+    affiliation: "University of Duisburg-Essen, House of Energy, Climate and Finance"
+
+version: "v1.0"
+date-released: 2026-04-22
+
+repository-code: "https://github.com/PfluYa/Regio_Invest_Wind_open"
+
+abstract: >
+  RegioInvest Wind is a MATLAB-based model for simulating regional onshore wind 
+  power deployment in Germany. The model allocates future capacity expansion 
+  across regions and turbine types under different policy scenarios, combining 
+  spatial constraints, investment decisions, and wind resource modeling.
+
+keywords:
+  - wind energy
+  - investment modeling
+  - discrete choice
+  - spatial allocation
+  - energy policy
+
+license: MIT
+
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Pflugfelder"
+      given-names: "Yannik"
+  title: "Spatially differentiated renewable subsidies: Good for ratepayers and bad for investors? Empirical evidence from Onshore Wind in Germany"
+  journal: "tba"
+  year: 2026
+  doi: "tba"
