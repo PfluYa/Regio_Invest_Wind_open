@@ -24,30 +24,34 @@ The following datasets are required:
 
 * **Turbine Data (MaStR)**
   * This repository includes data derived from the Marktstammdatenregister of the German Federal Network Agency (Bundesnetzagentur).  
-Source: https://www.marktstammdatenregister.de (accessed on 24.03.2025).  
-© Bundesnetzagentur. The data are publicly available and may be reused in accordance with §111e EnWG.  
-Modifications: [Filtered for Wind Turbines in Germany with commission date before 01.01.2025].
+    Source: https://www.marktstammdatenregister.de (accessed on 24.03.2025).  
+    © Bundesnetzagentur. The data are publicly available and may be reused in accordance with §111e EnWG.  
+    Modifications: [Filtered for Wind Turbines in Germany with commission date before 01.01.2025].
+  * Source: https://www.govdata.de/dl-de/by-2-0
+  * License: Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)
+  * Changes: Data cleaned, filtered, and aggregated by the authors
 
 * **ERA5 Weather Data (not redistributed)**
-  - Source: Copernicus Climate Data Store (CDS), DOI: https://doi.org/10.24381/cds.adbb2d47
-  - Required variables: `u10`, `v10`, `u100`, `v100`
-  - Format: NetCDF (`.nc`)
-  - Temporal resolution: hourly  
-    Spatial resolution: 0.25° grid
-  - Download: ERA5 data can be obtained directly from the Copernicus Climate Data Store via the
+   * Source: Copernicus Climate Data Store (CDS), DOI: https://doi.org/10.24381/cds.adbb2d47
+   * Required variables: `u10`, `v10`, `u100`, `v100`
+   * Format: NetCDF (`.nc`)
+   * Temporal resolution: hourly  
+   *Spatial resolution: 0.25° grid
+   * Download: ERA5 data can be obtained directly from the Copernicus Climate Data Store via the
     [download portal](https://cds.climate.copernicus.eu) as NetCDF files. Users should select the
     required variables (`u10`, `v10`, `u100`, `v100`), the temporal coverage (typically full years),
     and the spatial domain covering the study region.
 
 * **Power Curve Data (included)**
   * CSV or MATLAB file with power curves per turbine type
+  * based on Pöstges, A. & Weber, C. (2023). Identifying key elements for adequate simplifications of investment choices – The case of wind energy expansion. Energy Economics, 120, 106534. https://doi.org/10.1016/j.eneco.2023.106534
 
 * **Geodata (included)**
   * NUTS-3 region polygons and centroids © European Union, 2021 — GISCO, NUTS 2021 boundaries and points. Licensed under CC BY 4.0.  
   * Land-use exclusion zones
 
 ## Scenario configuration
-The model supports four main expansion cases. These are controlled via _paraRegioInvest.expansionCase_:
+The model supports four main expansion cases. These are controlled via _paraRegioInvest.expansionCase_. Key options:
 * Case 1: Discrete choice model (nested logit) - standard case and new methodology
 * Case 2: Allocation proportional to existing capacity
 * Case 3: Allocation proportional to available land
@@ -63,6 +67,7 @@ Other key parameters
 * Spatial constraints: Expansion is bounded by remaining suitable land per region, considering already installed capacity.
 * NPV Calculation: Accounts for CAPEX, OPEX, compensation, and optional correction factors.
 To include negative NPVs in regression, the model apllies an _asinh_ transformation, see function _transformed_NPV_. This allows both positive and negative values to enter the model symetrically while avoiding the discontinuity of a log transformation.
+* Adjustment of the reference yield schedule helps examine economic efficiency and fair spatial distribution in the sense of a “second-best instrument.”
 
 ## Outputs
 The model generates a .mat file containing regional results, e.g.:
