@@ -34,7 +34,7 @@ clear global;
 %
 % Adjust this only if your local setup differs.
 
-userpath = 'C:\Users\Yannik.Pflugfelder\Documents\Github';
+userpath = '...\Github';
 
 repoName = 'Regio_Invest_Wind_open';
 repoPath = fullfile(userpath, repoName);
@@ -80,7 +80,7 @@ paraRegioInvest.simYear = 2040;
 % 3 = Proportional to remaining area (ignores wind yield)
 % 4 = Merit-order principle (linear optimization, ignores logit)
 % Default (current): 1
-paraRegioInvest.expansionCase = 2;
+paraRegioInvest.expansionCase = 1;
 
 % Geographic scope of the simulation.
 % Default (current): {'DE'}
@@ -140,7 +140,7 @@ optsRegioInvest.windOnshoreMethodology = 'binomialNestedLogit';
 % 'capacity' = target installed capacity
 % 'energy'   = target electricity generation
 % Default (current): 'capacity'
-optsRegioInvest.iterationLogicInvestment = 'capacity';
+optsRegioInvest.iterationLogicInvestment = 'energy';
 
 % Explanatory variable(s) for the discrete choice model.
 % Default (current): {'netPresentValue'}
