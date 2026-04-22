@@ -1,9 +1,17 @@
-function [discreteChoiceData] = estimateLogitParameter(inputData, discreteChoiceSettings)
-% ESTIMATELOGITPARAMETER Estimates parameters of a discrete choice model via MLE.
+function discreteChoiceData = estimateLogitParameter(inputData, discreteChoiceSettings)
+% ESTIMATELOGITPARAMETER
+% Estimate nested-logit parameters by maximum likelihood.
 %
-% INPUTS:
-%   inputData              - Table with observed investment decisions and explanatory variables
-%   discreteChoiceSettings - Struct with settings:
+% DESCRIPTION
+% This function estimates the parameters of the discrete-choice model used
+% in the wind investment framework. It prepares the estimation inputs,
+% calls MATLAB's unconstrained optimizer, and returns parameter estimates,
+% fit measures, and approximate standard errors based on the Hessian.
+%
+% INPUTS
+%   inputData : table containing observed choices and explanatory variables
+%
+%   discreteChoiceSettings : struct with fields
 %       .explainedVariable
 %       .explanatoryVariables
 %       .parameter
@@ -12,167 +20,240 @@ function [discreteChoiceData] = estimateLogitParameter(inputData, discreteChoice
 %       .nrAlternatives
 %       .nrExplanatoryVariables
 %
-% OUTPUT:
-%   discreteChoiceData     - Struct containing estimation results (parameters, fit metrics, etc.)
+% OUTPUT
+%   discreteChoiceData : struct containing
+%       .discreteChoiceParam
+%       .nll_beta
+%       .nll_0
+%       .RSquare
+%       .exitflag
+%       .output
+%       .grad
+%       .hessian
+%       .stderr
+%       .nrDecisionMaker
+%       .nrExplanatoryVariables
+%       .nrAlternatives
+%
+% MODEL CONVENTIONS
+% - The current specification fixes turbine type 4 as the reference
+%   alternative, i.e. alpha4 = 0.
+% - The current implementation uses lambdaDivision = true.
+% - No turbine-specific alpha covariate is used in the baseline
+%   specification, i.e. z_alpha = 1.
 
-    % Global variables needed for log-likelihood calculation
-    global y x z_alpha NDecisionMaker NAlt NExpl alphaEstimation lambdaDivision
+%% ------------------------------------------------------------------------
+% 0. GLOBALS USED INSIDE THE LOG-LIKELIHOOD
+% -------------------------------------------------------------------------
 
-    % === Prepare inputs ===
-    y = inputData{:, discreteChoiceSettings.explainedVariable};
-    x = inputData{:, discreteChoiceSettings.explanatoryVariables};
+global y x z_alpha NDecisionMaker NAlt NExpl alphaEstimation lambdaDivision
 
-    % Optional: turbine-specific explanatory variable
-    explanatoryVariable_turbine = 'none';
-    if strcmp(explanatoryVariable_turbine, 'none')
-        z_alpha = ones(size(inputData, 1), 1);
-    else
-        z_alpha = inputData{:, explanatoryVariable_turbine};
-    end
+%% ------------------------------------------------------------------------
+% 1. PREPARE ESTIMATION INPUTS
+% -------------------------------------------------------------------------
 
-    % Model settings
-    alphaEstimation = 'none';
-    lambdaDivision  = true;
+y = inputData{:, discreteChoiceSettings.explainedVariable};
+x = inputData{:, discreteChoiceSettings.explanatoryVariables};
 
-    NDecisionMaker  = discreteChoiceSettings.nrDecisionMaker;
-    NAlt            = discreteChoiceSettings.nrAlternatives;
-    NExpl           = discreteChoiceSettings.nrExplanatoryVariables;
+% Current baseline: no additional turbine-specific explanatory variable
+explanatoryVariableTurbine = 'none';
 
-    % === Estimation via Maximum Likelihood ===
-    options = optimset('LargeScale','on','Display','on','GradObj','off',...
-                       'MaxFunEvals',1e5,'MaxIter',[],'DerivativeCheck','on');
-
-    [paramhat,fval,exitflag,output,grad,hessian] = ...
-        fminunc(@negloglike, discreteChoiceSettings.parameter, options);
-
-    % === Assemble output ===
-    discreteChoiceData.discreteChoiceParam = array2table(paramhat);
-    discreteChoiceData.discreteChoiceParam.Properties.VariableNames = ...
-        discreteChoiceSettings.parameterNames';
-
-    discreteChoiceData.nll_beta = fval;
-    discreteChoiceData.nll_0 = negloglike(zeros(size(paramhat)));
-    discreteChoiceData.RSquare = 1 - discreteChoiceData.nll_beta / discreteChoiceData.nll_0;
-
-    discreteChoiceData.exitflag = exitflag;
-    discreteChoiceData.output = output;
-    discreteChoiceData.grad = grad;
-    discreteChoiceData.hessian = hessian;
-
-    discreteChoiceData.nrDecisionMaker = NDecisionMaker;
-    discreteChoiceData.nrExplanatoryVariables = NExpl;
-    discreteChoiceData.nrAlternatives = NAlt;
-
-    % === Diagnostics and uncertainty ===
-    disp(['The McFadden R² is: ', num2str(discreteChoiceData.RSquare)])
-    disp(['Negative log-likelihood (estimated): ', num2str(fval)])
-    disp(['Negative log-likelihood (null model): ', num2str(discreteChoiceData.nll_0)])
-
-    hessian_reg = ensure_positive_definite(hessian);
-    ihess = inv(hessian_reg);
-    stderr = sqrt(diag(ihess));
-
-    disp(['Gradient * inv(Hessian) * Gradient = ', num2str(grad' * ihess * grad)])
-    disp(' ')
-    disp('ESTIMATION RESULTS')
-    disp('----------------------------')
-    disp('Parameter        Est       SE        t-stat')
-    for i = 1:length(paramhat)
-        fprintf('%-10s %10.4f %10.4f %10.4f\n', ...
-            discreteChoiceSettings.parameterNames{i}, ...
-            paramhat(i), stderr(i), paramhat(i) / stderr(i));
-    end
-    disp(' ');
+if strcmp(explanatoryVariableTurbine, 'none')
+    z_alpha = ones(size(inputData, 1), 1);
+else
+    z_alpha = inputData{:, explanatoryVariableTurbine};
 end
 
+% Current baseline settings
+alphaEstimation = 'none';
+lambdaDivision  = true;
 
-function hessian_regularized = ensure_positive_definite(Hessian)
-%ENSURE_POSITIVE_DEFINITE Ensures Hessian matrix is positive definite by regularizing.
+NDecisionMaker = discreteChoiceSettings.nrDecisionMaker;
+NAlt           = discreteChoiceSettings.nrAlternatives;
+NExpl          = discreteChoiceSettings.nrExplanatoryVariables;
+
+%% ------------------------------------------------------------------------
+% 2. MAXIMUM-LIKELIHOOD ESTIMATION
+% -------------------------------------------------------------------------
+% The current implementation uses fminunc with numerical derivatives.
+
+options = optimset( ...
+    'LargeScale', 'on', ...
+    'Display', 'on', ...
+    'GradObj', 'off', ...
+    'MaxFunEvals', 1e5, ...
+    'MaxIter', [], ...
+    'DerivativeCheck', 'on');
+
+[paramhat, fval, exitflag, output, grad, hessian] = ...
+    fminunc(@negloglike, discreteChoiceSettings.parameter, options);
+
+%% ------------------------------------------------------------------------
+% 3. ASSEMBLE ESTIMATION OUTPUT
+% -------------------------------------------------------------------------
+
+discreteChoiceData.discreteChoiceParam = array2table(paramhat);
+discreteChoiceData.discreteChoiceParam.Properties.VariableNames = ...
+    discreteChoiceSettings.parameterNames';
+
+discreteChoiceData.nll_beta = fval;
+discreteChoiceData.nll_0 = negloglike(zeros(size(paramhat)));
+discreteChoiceData.RSquare = ...
+    1 - discreteChoiceData.nll_beta / discreteChoiceData.nll_0;
+
+discreteChoiceData.exitflag = exitflag;
+discreteChoiceData.output   = output;
+discreteChoiceData.grad     = grad;
+discreteChoiceData.hessian  = hessian;
+
+discreteChoiceData.nrDecisionMaker         = NDecisionMaker;
+discreteChoiceData.nrExplanatoryVariables  = NExpl;
+discreteChoiceData.nrAlternatives          = NAlt;
+
+%% ------------------------------------------------------------------------
+% 4. INFERENCE BASED ON REGULARIZED HESSIAN
+% -------------------------------------------------------------------------
+
+disp(['McFadden R^2: ', num2str(discreteChoiceData.RSquare)])
+disp(['Negative log-likelihood (estimated): ', num2str(fval)])
+disp(['Negative log-likelihood (null model): ', num2str(discreteChoiceData.nll_0)])
+
+hessianRegularized = ensure_positive_definite(hessian);
+invHessian = inv(hessianRegularized);
+stderr = sqrt(diag(invHessian));
+
+discreteChoiceData.stderr = stderr;
+
+disp(['Gradient'' * inv(Hessian) * Gradient = ', ...
+      num2str(grad' * invHessian * grad)])
+disp(' ')
+disp('ESTIMATION RESULTS')
+disp('----------------------------')
+disp('Parameter        Est         SE        t-stat')
+
+for i = 1:numel(paramhat)
+    fprintf('%-10s %10.4f %10.4f %10.4f\n', ...
+        discreteChoiceSettings.parameterNames{i}, ...
+        paramhat(i), ...
+        stderr(i), ...
+        paramhat(i) / stderr(i));
+end
+
+disp(' ')
+
+end
+
+%% ========================================================================
+% LOCAL FUNCTIONS
+% ========================================================================
+
+function hessianRegularized = ensure_positive_definite(hessianMatrix)
+% ENSURE_POSITIVE_DEFINITE
+% Regularize the Hessian until it is positive definite.
 %
-% INPUT:
-%   Hessian - Original Hessian matrix
+% INPUT
+%   hessianMatrix : Hessian from the optimizer
 %
-% OUTPUT:
-%   hessian_regularized - Regularized Hessian matrix
+% OUTPUT
+%   hessianRegularized : positive-definite Hessian used for inference
+%
+% NOTE
+% The current implementation applies diagonal ridge regularization with a
+% sequence of increasing epsilon values.
 
     epsilons = [1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2];
-    
-    for eps = epsilons
-        if all(eig(Hessian) > 0)
-            disp('Hessian is already positive definite.');
-            hessian_regularized = Hessian;
+
+    if all(eig(hessianMatrix) > 0)
+        disp('Hessian is already positive definite.');
+        hessianRegularized = hessianMatrix;
+        return;
+    end
+
+    for epsValue = epsilons
+        candidate = hessianMatrix + epsValue .* eye(size(hessianMatrix));
+
+        if all(eig(candidate) > 0)
+            disp(['Regularized Hessian with epsilon = ', num2str(epsValue)]);
+            hessianRegularized = candidate;
             return;
-        else
-            Hessian = Hessian + eps * eye(size(Hessian));
-            disp(['Regularizing Hessian with epsilon = ', num2str(eps)]);
         end
     end
 
-    if any(eig(Hessian) <= 0)
-        error('Failed to regularize Hessian. Not positive definite.');
-    end
-
-    hessian_regularized = Hessian;
-    disp('Hessian successfully regularized.');
+    error('Failed to regularize Hessian to positive definiteness.');
 end
 
+function nll = negloglike(paramLogLike)
+% NEGLOGLIKE
+% Evaluate the negative log-likelihood of the nested-logit model.
+%
+% PARAMETER VECTOR ORDER
+%   [beta, gamma, lambda, alpha]
+%
+% CURRENT MODEL CONVENTION
+%   alpha4 = 0 (turbine type 4 is the reference alternative)
 
-
-
-function [nll] = negloglike(paramLogLike)
-    %% This Script constructs a negative log likelihood function for a given problem
-    %  Input parameters are the parameters to estimate in param, the explanatory
-    %  variables x and the obsvered dicision y
-    %  param is a table with beta, gamma and lambda – gamma and lambda are 1x1
-    %  values, the size of beta depends on the amount of explanatory variables,
-    %  therefore beta is 1xNumberX vector
-    %  x is a matrix n*i x NrExplanatory ( i are the alternatives and n is
-    %  the usergroup oder user n -> in our Case NrExplanatory = 1  -> size(x) = n*i x 1)
-    %  y is a matrix with the size i*n
-    
     global y x z_alpha NDecisionMaker NAlt NExpl alphaEstimation lambdaDivision
-    
-    % init explanatory variables and the obsveration
-    explVar = x;
-    explVar_alpha = z_alpha;
-    ani = y(:,1);
-    ani = reshape(ani,[NAlt,NDecisionMaker]);
-    an0 = 1-sum(ani,1);
-    %an0 = reshape(an0,[NAlt, NDecisionMaker]);
-    %an0 = floor(sum(reshape(y(:,2),[NAlt,NDecisionMaker]),1)/NAlt)-sum(ani,1);
-    % init the parameter to estimate
-    
-    beta = paramLogLike(1:NExpl); %Nx x 1 Vector
-    gamma = paramLogLike(NExpl+1);
-    lambda = paramLogLike(NExpl+2);
-    if strcmp(alphaEstimation,'estimateAlpha0')
-        alpha = paramLogLike(end-(NAlt-1):end); %Alpha0 ~=0
-    else
-        alpha = [paramLogLike(end-(NAlt-2):end-(NAlt-2)+2) 0 paramLogLike(end-(NAlt-2)+3:end)]; %Alpha4 = 0 - Turbine 4 now reference turbine
-    end
-    alpha = repmat(alpha,[1,NDecisionMaker]);
-    %
-    %% Equation of the log likelihood in General
-    
-    if lambda ~= 0
-        if lambdaDivision
-            vni = exp((explVar*beta' + alpha'.*explVar_alpha)./lambda);
-        else
-            vni = exp((explVar*beta' + alpha'.*explVar_alpha));
-        end
-    else
-        vni = exp(explVar*beta' + alpha'.*explVar_alpha);
-    end
-    vni = reshape(vni,[NAlt,NDecisionMaker]);
-    vni_sum = sum(vni,1);
-    
-    wnk = gamma;
-    Ink = log(vni_sum);
-    vnk = exp(-(wnk+lambda.*Ink));
-    
-    p1 = sum(ani.*log((vni./vni_sum).*(1./(1+vnk))),1); 
-    p2 = an0.*log(1./(1+exp(wnk+lambda.*Ink)));
-    p = p1+p2;
-    nll = -(sum(p,2));
 
+    %% --------------------------------------------------------------------
+    % 1. PREPARE DATA
+    % ---------------------------------------------------------------------
+
+    explVar = x;
+    explVarAlpha = z_alpha;
+
+    ani = y(:, 1);
+    ani = reshape(ani, [NAlt, NDecisionMaker]);
+
+    an0 = 1 - sum(ani, 1);
+
+    %% --------------------------------------------------------------------
+    % 2. UNPACK PARAMETERS
+    % ---------------------------------------------------------------------
+
+    beta = paramLogLike(1:NExpl);
+    gamma = paramLogLike(NExpl + 1);
+    lambda = paramLogLike(NExpl + 2);
+
+    if strcmp(alphaEstimation, 'estimateAlpha0')
+        alpha = paramLogLike(end - (NAlt - 1):end);
+    else
+        % Current convention: alpha4 = 0
+        alpha = [ ...
+            paramLogLike(end - (NAlt - 2):end - (NAlt - 2) + 2), ...
+            0, ...
+            paramLogLike(end - (NAlt - 2) + 3:end)];
+    end
+
+    alpha = repmat(alpha, [1, NDecisionMaker]);
+
+    %% --------------------------------------------------------------------
+    % 3. COMPUTE CHOICE PROBABILITIES
+    % ---------------------------------------------------------------------
+
+    systematicUtility = explVar * beta' + alpha' .* explVarAlpha;
+
+    if lambda ~= 0 && lambdaDivision
+        vni = exp(systematicUtility ./ lambda);
+    else
+        vni = exp(systematicUtility);
+    end
+
+    vni = reshape(vni, [NAlt, NDecisionMaker]);
+    vniSum = sum(vni, 1);
+
+    inclusiveValue = log(vniSum);
+    vnk = exp(-(gamma + lambda .* inclusiveValue));
+
+    conditionalProb = vni ./ vniSum;
+    nestProb = 1 ./ (1 + vnk);
+    noInvestmentProb = 1 ./ (1 + exp(gamma + lambda .* inclusiveValue));
+
+    %% --------------------------------------------------------------------
+    % 4. LOG-LIKELIHOOD
+    % ---------------------------------------------------------------------
+
+    p1 = sum(ani .* log(conditionalProb .* nestProb), 1);
+    p2 = an0 .* log(noInvestmentProb);
+
+    nll = -sum(p1 + p2, 2);
 end

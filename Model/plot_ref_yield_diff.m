@@ -1,62 +1,112 @@
-withRYM    = load('2025-08-12_results_nuts3_base2024_target2040_expCase1').selected_data;
-withoutRYM = load('2025-08-12_results_nuts3_base2024_target2040_expCase1_wo_refYield').selected_data;
+%% Plot relative capacity difference: without RYM vs. with RYM
+% This script compares two simulation results and visualizes the relative
+% difference in installed capacity at NUTS3 level.
+%
+% Color logic:
+%   - red   -> lower capacity without RYM
+%   - green -> higher capacity without RYM
+%   - grey  -> missing values
+%
+% Visualization is clipped to +/- 50%.
 
-withoutRYM.capacityTotal_withRYM = withRYM.capacityTotal;
-withoutRYM.perc_diff_to_with = (withoutRYM.capacityTotal - withRYM.capacityTotal) ./ withRYM.capacityTotal;
+%% ------------------------------------------------------------------------
+% 1. LOAD RESULTS
+% -------------------------------------------------------------------------
 
-plot_perc_diff_map(withoutRYM);
+withRYM = load('2025-08-12_results_nuts3_base2024_target2040_expCase1.mat');
+withoutRYM = load('2025-08-12_results_nuts3_base2024_target2040_expCase1_wo_refYield.mat');
 
+withRYM = withRYM.selected_data;
+withoutRYM = withoutRYM.selected_data;
 
-function plot_perc_diff_map(regioData)
-% PLOT_PERC_DIFF_MAP Visualizes percent difference between scenarios (red/green)
-%   Colors:
-%   - Red for < 0 (less capacity w/o RYM)
-%   - Green for > 0 (more capacity w/o RYM)
-%   - Grey for NaN
+%% ------------------------------------------------------------------------
+% 2. ALIGN DATA BY NUTS3 ID
+% -------------------------------------------------------------------------
 
-values = regioData.perc_diff_to_with;
+[isMatched, idxWith] = ismember(withoutRYM.nutsID, withRYM.nutsID);
 
-% Limit to ±0.5 for visualization
-valuesClipped = min(max(values, -0.5), 0.5);  % clip to [-0.5, 0.5]
+if any(~isMatched)
+    error('Mismatch in NUTS3 IDs between the two result files.');
+end
 
-% Color mapping function
-colorMap = @(v) [ ...
-    1 - max(0, v / 0.5), ...  % Red fades from 1 to 0 as v goes from -0.5 to 0.5
-    1 - max(0, -v / 0.5), ... % Green fades from 0 to 1 as v goes from -0.5 to 0.5
-    1];                       % Blue stays high to keep background bright
+withoutRYM.capacityTotal_withRYM = withRYM.capacityTotal(idxWith);
 
+%% ------------------------------------------------------------------------
+% 3. CALCULATE RELATIVE DIFFERENCE
+% -------------------------------------------------------------------------
 
-% Begin plot
-figure(); hold on;
-title('');%'Relative capacity difference (w/o RYM vs. with RYM)');
+withoutRYM.perc_diff_to_with = ...
+    (withoutRYM.capacityTotal - withoutRYM.capacityTotal_withRYM) ./ ...
+     withoutRYM.capacityTotal_withRYM;
 
-for i = 1:height(regioData)
-    shape = polyshape(regioData.lonPoly{i}, regioData.latPoly{i});
-    val = valuesClipped(i);
+values = withoutRYM.perc_diff_to_with;
+
+%% ------------------------------------------------------------------------
+% 4. PREPARE VISUALIZATION
+% -------------------------------------------------------------------------
+
+% Clip values to +/- 50% for readability
+clipLimit = 0.5;
+valuesClipped = min(max(values, -clipLimit), clipLimit);
+
+% Original color mapping:
+% - negative values -> more red
+% - positive values -> more green
+% - blue channel fixed to keep colors bright
+colorMapFun = @(v) [ ...
+    1 - max(0, v / clipLimit), ...
+    1 - max(0, -v / clipLimit), ...
+    1];
+
+%% ------------------------------------------------------------------------
+% 5. PLOT MAP
+% -------------------------------------------------------------------------
+
+figure();
+hold on;
+title('');
+
+for i = 1:height(withoutRYM)
+    regionShape = polyshape(withoutRYM.lonPoly{i}, withoutRYM.latPoly{i});
+    valueHere = valuesClipped(i);
+
     if isnan(values(i))
-        faceCol = [0.5 0.5 0.5];  % gray for NaN
+        faceCol = [0.5 0.5 0.5];
     else
-        faceCol = colorMap(val);
+        faceCol = colorMapFun(valueHere);
     end
-    plot(shape, 'FaceColor', faceCol, 'FaceAlpha', 0.8, 'EdgeColor', [.7 .7 .7]);
+
+    plot(regionShape, ...
+        'FaceColor', faceCol, ...
+        'FaceAlpha', 0.8, ...
+        'EdgeColor', [0.7 0.7 0.7]);
 end
 
-% Add custom legend with colorbar
-% Build colormap matching colorMap logic
+%% ------------------------------------------------------------------------
+% 6. CUSTOM COLORBAR
+% -------------------------------------------------------------------------
+
 nSteps = 100;
-vals = linspace(-0.5, 0.5, nSteps);
+vals = linspace(-clipLimit, clipLimit, nSteps);
 colors = zeros(nSteps, 3);
+
 for i = 1:nSteps
-    colors(i, :) = colorMap(vals(i));
+    colors(i, :) = colorMapFun(vals(i));
 end
+
 colormap(colors);
 
 cb = colorbar;
 cb.Ticks = [0 0.5 1];
 cb.TickLabels = {'-50%', '0%', '+50%'};
-cb.Label.String = '';%'Capacity difference (w/o RYM vs. with RYM)';
+cb.Label.String = '';
 
-axis off
-xlim([min(regioData.lonPoint)-1, max(regioData.lonPoint)+1]);
-ylim([min(regioData.latPoint)-1, max(regioData.latPoint)+1]);
-end
+%% ------------------------------------------------------------------------
+% 7. AXIS SETTINGS
+% -------------------------------------------------------------------------
+
+axis off;
+axis equal;
+xlim([min(withoutRYM.lonPoint) - 1, max(withoutRYM.lonPoint) + 1]);
+ylim([min(withoutRYM.latPoint) - 1, max(withoutRYM.latPoint) + 1]);
+hold off;

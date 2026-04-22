@@ -1,75 +1,172 @@
 function plot_results(resultsWindOnshoreTurbinesUnstack, regioDataWind)
-% PLOT_RESULTS Visualizes onshore wind capacity results across turbine types and regions.
+% PLOT_RESULTS
+% Visualize simulated onshore wind deployment across turbine types and
+% regions.
 %
-% INPUTS:
-%   resultsWindOnshoreTurbinesUnstack - Table with installed capacities for each turbine type
-%   regioDataWind                     - Table with geographic and capacity data per NUTS3 region
+% INPUTS
+%   resultsWindOnshoreTurbinesUnstack : table with installed capacities by
+%                                       NUTS3 region and turbine type
+%   regioDataWind                     : regional table with polygons and
+%                                       capacity indicators
+%
+% OUTPUT
+%   This function creates:
+%     1. a bar chart of installed capacity by turbine type,
+%     2. a map of total installed capacity,
+%     3. a map of installed capacity per km^2,
+%     4. a map of installed capacity per available wind area.
+%
+% NOTES
+% - Capacities are internally assumed to be stored in kW and converted to
+%   GW for the bar chart.
+% - Map plots use alpha transparency to represent intensity.
 
-%% 1. Bar plot: Installed capacity per turbine type
-turbineData = table2array(resultsWindOnshoreTurbinesUnstack(:, 2:9));
-bar(sum(turbineData) / 1e6);
-set(gca, "XTickLabel", {'Type 1', 'Type 2', 'Type 3', 'Type 4', 'Type 5', 'Type 6', 'Type 7', 'Type 8'});
+%% ------------------------------------------------------------------------
+% 1. INSTALLED CAPACITY BY TURBINE TYPE
+% -------------------------------------------------------------------------
+
+turbineColumns = resultsWindOnshoreTurbinesUnstack.Properties.VariableNames(2:end);
+turbineCapacity = table2array(resultsWindOnshoreTurbinesUnstack(:, turbineColumns));
+
+figure();
+bar(sum(turbineCapacity, 1) ./ 1e6);
+
+% Create readable x-axis labels from column names if possible
+defaultLabels = {'Type 1', 'Type 2', 'Type 3', 'Type 4', ...
+                 'Type 5', 'Type 6', 'Type 7', 'Type 8'};
+
+if numel(turbineColumns) == numel(defaultLabels)
+    set(gca, 'XTickLabel', defaultLabels);
+else
+    set(gca, 'XTickLabel', turbineColumns);
+end
+
 ylabel('Installed capacity [GW]');
-title('Installed Wind Capacity by Turbine Type');
+title('Installed wind capacity by turbine type');
+grid on;
 
-%% 2. Map plot: Total installed capacity per NUTS3
-resultsToPlot = regioDataWind.capacityTotal;
-totalCapacityGW = sum(resultsToPlot) / 1e6;
-resultsToPlot(resultsToPlot <= 500) = NaN;
+%% ------------------------------------------------------------------------
+% 2. MAP: TOTAL INSTALLED CAPACITY
+% -------------------------------------------------------------------------
 
-% disp(['Total Capacity: ', num2str(totalCapacityGW), ' GW']);
+valuesTotalCapacity = regioDataWind.capacityTotal;
+valuesTotalCapacity(valuesTotalCapacity <= 500) = NaN;
 
-plotCapacityMap(regioDataWind, resultsToPlot, 'Installed capacity per NUTS 3 in target year', 'MW');
+plotCapacityMap( ...
+    regioDataWind, ...
+    valuesTotalCapacity, ...
+    'Installed capacity by NUTS3 region in target year', ...
+    'MW');
 
-%% 3. Map plot: Capacity density per km² (absolute)
-resultsToPlot = regioDataWind.capPerKm2;
-resultsToPlot(resultsToPlot <= 0.0001) = NaN;
+%% ------------------------------------------------------------------------
+% 3. MAP: INSTALLED CAPACITY PER TOTAL AREA
+% -------------------------------------------------------------------------
 
-plotCapacityMap(regioDataWind, resultsToPlot, ...
-    'Installed capacity per area and NUTS 3 in target year', 'MW/km²');
+valuesCapacityPerKm2 = regioDataWind.capPerKm2;
+valuesCapacityPerKm2(valuesCapacityPerKm2 <= 0.0001) = NaN;
 
-%% 4. Map plot: Capacity density per available area
-resultsToPlot = regioDataWind.capPerKm2avail;
-totalCapacityGW = sum(resultsToPlot) / 1e6;
-resultsToPlot(resultsToPlot <= 0.0001) = NaN;
+plotCapacityMap( ...
+    regioDataWind, ...
+    valuesCapacityPerKm2, ...
+    'Installed capacity per km^2 by NUTS3 region in target year', ...
+    'MW/km^2');
 
-% disp(['Total Capacity: ', num2str(totalCapacityGW), ' GW']);
+%% ------------------------------------------------------------------------
+% 4. MAP: INSTALLED CAPACITY PER AVAILABLE WIND AREA
+% -------------------------------------------------------------------------
 
-plotCapacityMap(regioDataWind, resultsToPlot, ...
-    'Installed capacity per area available and NUTS 3 in target year', 'MW/km²');
+valuesCapacityPerKm2Available = regioDataWind.capPerKm2avail;
+valuesCapacityPerKm2Available(valuesCapacityPerKm2Available <= 0.0001) = NaN;
+
+plotCapacityMap( ...
+    regioDataWind, ...
+    valuesCapacityPerKm2Available, ...
+    'Installed capacity per available wind area by NUTS3 region in target year', ...
+    'MW/km^2');
 
 end
 
-%% Helper Function: Plot regional map
+%% ========================================================================
+% LOCAL FUNCTIONS
+% ========================================================================
+
 function plotCapacityMap(regioData, values, titleStr, unitStr)
+% PLOTCAPACITYMAP
+% Plot a choropleth-style regional map using polygon transparency.
+%
+% INPUTS
+%   regioData : table containing
+%       - lonPoly, latPoly : polygon coordinates
+%       - lonPoint, latPoint : point coordinates used for axis limits
+%   values    : numeric vector of values to visualize
+%   titleStr  : plot title
+%   unitStr   : unit label shown in legend text
+%
+% NOTE
+% Regions with NaN values are drawn in black.
+
     maxVal = max(values, [], 'omitnan');
     minVal = min(values, [], 'omitnan');
-    rescaled = rescale(values);  % Normalize for transparency
 
-    figure(); hold on;
-    plot(polyshape(), 'FaceColor', 'blue', 'FaceAlpha', 1);  % Dummy legend
-    plot(polyshape(), 'FaceColor', 'white');
-    plot(polyshape(), 'FaceColor', 'black');
+    if all(isnan(values))
+        warning('All map values are NaN. Plot will show only missing regions.');
+        alphaValues = values;
+    else
+        alphaValues = rescale(values, 0.1, 1.0);
+    end
+
+    figure();
+    hold on;
 
     warning('off', 'all');
-    for i = 1:height(regioData)
-        shape = polyshape(regioData.lonPoly{i}, regioData.latPoly{i});
-        if ~isnan(rescaled(i))
-            plot(shape, 'FaceColor', 'blue', 'FaceAlpha', rescaled(i));
+
+    for regionIdx = 1:height(regioData)
+        regionShape = polyshape( ...
+            regioData.lonPoly{regionIdx}, ...
+            regioData.latPoly{regionIdx});
+
+        if ~isnan(alphaValues(regionIdx))
+            plot(regionShape, ...
+                'FaceColor', 'blue', ...
+                'FaceAlpha', alphaValues(regionIdx), ...
+                'EdgeColor', 'none');
         else
-            plot(shape, 'FaceColor', 'black');
+            plot(regionShape, ...
+                'FaceColor', 'black', ...
+                'FaceAlpha', 1, ...
+                'EdgeColor', 'none');
         end
     end
+
     warning('on', 'all');
 
     title(titleStr);
-    legend(...
-        ['max = ', num2str(round(maxVal)), ' ', unitStr], ...
-        ['min = ', num2str(round(minVal)), ' ', unitStr], ...
+
+    % Minimal legend via dummy objects
+    hMax = plot(nan, nan, 's', ...
+        'MarkerFaceColor', 'blue', ...
+        'MarkerEdgeColor', 'blue', ...
+        'MarkerSize', 8);
+    hMin = plot(nan, nan, 's', ...
+        'MarkerFaceColor', [0.7 0.7 1.0], ...
+        'MarkerEdgeColor', [0.7 0.7 1.0], ...
+        'MarkerSize', 8);
+    hNaN = plot(nan, nan, 's', ...
+        'MarkerFaceColor', 'black', ...
+        'MarkerEdgeColor', 'black', ...
+        'MarkerSize', 8);
+
+    legend( ...
+        [hMax, hMin, hNaN], ...
+        {['max = ', num2str(round(maxVal, 2)), ' ', unitStr], ...
+         ['min = ', num2str(round(minVal, 2)), ' ', unitStr], ...
+         'no / negligible value'}, ...
         'Location', 'best');
 
-    xlim([min(regioData.lonPoint)-1, max(regioData.lonPoint)+1]);
-    ylim([min(regioData.latPoint)-1, max(regioData.latPoint)+1]);
+    xlim([min(regioData.lonPoint) - 1, max(regioData.lonPoint) + 1]);
+    ylim([min(regioData.latPoint) - 1, max(regioData.latPoint) + 1]);
+
     axis off;
+    axis equal;
     hold off;
 end

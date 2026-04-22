@@ -1,47 +1,84 @@
-function [netPresentValue, npv_costs_total_lifetime, npv_revenues_total_lifetime] = calcNetPresentValue( ...
-    inpInvestCost, inpProduction, inpLifetime, inpInterestRate, ...
-    inpCompensation, inpCompensationFactor, inpOPEXfix, inpOPEXperkWhvar)
+function [netPresentValue, npvCostsTotalLifetime, npvRevenuesTotalLifetime] = ...
+    calcNetPresentValue( ...
+        inpInvestCost, ...
+        inpProduction, ...
+        inpLifetime, ...
+        inpInterestRate, ...
+        inpCompensation, ...
+        inpCompensationFactor, ...
+        inpOPEXfix, ...
+        inpOPEXperkWhvar)
+% CALCNETPRESENTVALUE
+% Computes the net present value (NPV) of a wind turbine investment.
+%
+% DESCRIPTION
+% The function calculates the discounted lifetime revenues and costs of a
+% turbine-location combination and returns the resulting net present value.
+%
+% INPUTS (current defaults from main script)
+%   inpInvestCost           : investment cost [EUR]
+%   inpProduction           : annual electricity production [kWh/year]
+%   inpLifetime             : turbine lifetime [years] (default: 22)
+%   inpInterestRate         : discount rate [-] (default: 0.05)
+%   inpCompensation         : remuneration level [EUR/kWh] (default: 0.080)
+%   inpCompensationFactor   : location-specific correction factor [-]
+%   inpOPEXfix              : fixed O&M costs [EUR/year] (default: 15 EUR/kW * capacity)
+%   inpOPEXperkWhvar        : variable O&M costs [EUR/kWh] (default: 0.0075)
+%
+% OUTPUTS
+%   netPresentValue             : NPV [EUR]
+%   npvCostsTotalLifetime       : discounted total costs (CAPEX + OPEX) [EUR]
+%   npvRevenuesTotalLifetime    : discounted total revenues [EUR]
 
-    % Rename inputs for readability
-    investCost           = inpInvestCost;           % EUR (one-time)
-    production           = inpProduction;           % kWh/year (or MWh/year)
-    interestRate         = inpInterestRate;
-    lifetime             = inpLifetime;
-    compensation         = inpCompensation;         % EUR/kWh
-    compCorrectionFactor = inpCompensationFactor;   % unitless
-    opexFix              = inpOPEXfix;              % EUR/year
-    opexVar              = inpOPEXperkWhvar;        % EUR/kWh
+%% ------------------------------------------------------------------------
+% 1. ASSIGN INPUTS (for readability)
+% -------------------------------------------------------------------------
 
-    % ------------------------------------------------------------
-    % Annual components
-    % ------------------------------------------------------------
+investCost           = inpInvestCost;           % EUR
+production           = inpProduction;           % kWh/year
+interestRate         = inpInterestRate;         % -
+lifetime             = inpLifetime;             % years
+compensation         = inpCompensation;         % EUR/kWh
+compensationFactor   = inpCompensationFactor;   % -
+opexFix              = inpOPEXfix;              % EUR/year
+opexVar              = inpOPEXperkWhvar;        % EUR/kWh
 
-    % Annual revenues (EUR/year)
-    annualRevenues = compensation .* compCorrectionFactor .* production;
+%% ------------------------------------------------------------------------
+% 2. ANNUAL CASH FLOWS
+% -------------------------------------------------------------------------
 
-    % Annual operating costs (EUR/year)
-    annualOpex = opexVar .* production + opexFix;
+% Annual revenues (EUR/year)
+annualRevenues = compensation .* compensationFactor .* production;
 
-    % ------------------------------------------------------------
-    % Discounting over lifetime
-    % ------------------------------------------------------------
+% Annual operating costs (EUR/year)
+annualOpex = opexVar .* production + opexFix;
 
-    % Annuity factor for present value calculation
+%% ------------------------------------------------------------------------
+% 3. DISCOUNTING OVER LIFETIME
+% -------------------------------------------------------------------------
+
+% Present value factor for an annuity (sum of discounted annual flows)
+if interestRate == 0
+    % Edge case: no discounting
+    annuityFactor = lifetime;
+else
     annuityFactor = ((1 + interestRate)^lifetime - 1) / ...
                     ((1 + interestRate)^lifetime * interestRate);
+end
 
-    % Present value of revenues over lifetime (EUR)
-    npv_revenues_total_lifetime = annualRevenues * annuityFactor;
+% Discounted lifetime revenues (EUR)
+npvRevenuesTotalLifetime = annualRevenues .* annuityFactor;
 
-    % Present value of operating costs over lifetime (EUR)
-    npv_opex_total_lifetime = annualOpex * annuityFactor;
+% Discounted lifetime OPEX (EUR)
+npvOpexTotalLifetime = annualOpex .* annuityFactor;
 
-    % Present value of total costs = CAPEX + discounted OPEX (EUR)
-    npv_costs_total_lifetime = investCost + npv_opex_total_lifetime;
+% Total discounted costs (CAPEX + OPEX)
+npvCostsTotalLifetime = investCost + npvOpexTotalLifetime;
 
-    % ------------------------------------------------------------
-    % Net present value
-    % ------------------------------------------------------------
+%% ------------------------------------------------------------------------
+% 4. NET PRESENT VALUE
+% -------------------------------------------------------------------------
 
-    netPresentValue = npv_revenues_total_lifetime - npv_costs_total_lifetime;
+netPresentValue = npvRevenuesTotalLifetime - npvCostsTotalLifetime;
+
 end

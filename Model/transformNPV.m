@@ -1,13 +1,30 @@
-function transformedNPV = transformNPV(NPV)
-    %TRANSFORMNPV Applies conditional log transformation to NPV values.
-    %   For abs(NPV) >= 1: sgn(NPV) * ln(abs(NPV))
-    %   For -1 < NPV < 1: 0
-    % 
-    % transformedNPV = zeros(size(NPV));  % Initialize
-    % 
-    % idx = abs(NPV) >= 1;
-    % transformedNPV(idx) = sign(NPV(idx)) .* log(abs(NPV(idx)));
+function transformedNPV = transformNPV(npv)
+% TRANSFORMNPV
+% Transform net present value (NPV) values for use in the discrete-choice
+% model.
+%
+% DESCRIPTION
+% The current baseline specification applies the inverse hyperbolic sine
+% transformation:
+%
+%   transformedNPV = asinh(npv)
+%
+% This transformation is similar to a logarithm for large positive values,
+% but remains well-defined for zero and negative values. It is therefore
+% suitable for profitability measures such as NPV that may take both
+% positive and negative values.
+%
+% INPUT
+%   npv : net present value [EUR]
+%
+% OUTPUT
+%   transformedNPV : transformed NPV used in estimation and simulation [-]
+%
+% NOTE
+% The current model baseline uses the asinh transformation throughout.
+% Earlier alternative transformations (e.g. sign-log or log of positive
+% values only) are intentionally not used here.
 
-    transformedNPV = asinh(NPV);
-    % transformedNPV = log(max(NPV,0.00000000000000000000000001));
+    transformedNPV = asinh(npv);
+
 end
