@@ -1,7 +1,46 @@
-*.nc
-*.zip
-*.dbf
-*.shx
-*.shp
-*.mat
+# MATLAB temporary and autosave files
 *.asv
+*.m~
+*.autosave
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Input data
+# Do not track replication input files on GitHub.
+# Keep only the documentation file in Input_Data/.
+Input_Data/*
+!Input_Data/README.md
+
+# Generated paper outputs
+Results Paper/*.mat
+Results Paper/*.csv
+Results Paper/*.pdf
+Results Paper/*.fig
+Results Paper/*.png
+
+# Keep documentation in generated-results folder
+!Results Paper/README.md
+
+# Additional data-file formats, in case they are placed elsewhere
+*.xlsx
+*.xls
+*.csv
+*.nc
+*.nc4
+
+# ESRI Shapefile components
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.sbn
+*.sbx
+*.qix
+
+# Common geospatial sidecar / auxiliary files
+*.shp.xml
