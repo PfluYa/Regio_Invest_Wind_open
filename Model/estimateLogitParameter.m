@@ -6,7 +6,7 @@ function discreteChoiceData = estimateLogitParameter(inputData, discreteChoiceSe
 % This function estimates the parameters of the discrete-choice model used
 % in the wind investment framework. It prepares the estimation inputs,
 % calls MATLAB's unconstrained optimizer, and returns parameter estimates,
-% fit measures, and approximate standard errors based on the Hessian.
+% fit measures, and standard errors based on a central finite-difference Hessian evaluated at the final optimum.
 %
 % INPUTS
 %   inputData : table containing observed choices and explanatory variables
@@ -31,6 +31,8 @@ function discreteChoiceData = estimateLogitParameter(inputData, discreteChoiceSe
 %       .grad
 %       .hessian
 %       .stderr
+%       .inferenceHessian
+%       .inferenceHessianRelativeStep
 %       .nrDecisionMaker
 %       .nrExplanatoryVariables
 %       .nrAlternatives
@@ -105,34 +107,110 @@ discreteChoiceData.exitflag = exitflag;
 discreteChoiceData.output   = output;
 discreteChoiceData.grad     = grad;
 discreteChoiceData.hessian  = hessian;
+discreteChoiceData.optimizerHessian = hessian;
 
 discreteChoiceData.nrDecisionMaker         = NDecisionMaker;
 discreteChoiceData.nrExplanatoryVariables  = NExpl;
 discreteChoiceData.nrAlternatives          = NAlt;
 
 %% ------------------------------------------------------------------------
-% 4. INFERENCE BASED ON REGULARIZED HESSIAN
+% 4. INFERENCE FROM A CENTRAL FINITE-DIFFERENCE HESSIAN
+% -------------------------------------------------------------------------
+% The optimizer's numerical Hessian can be sensitive to internal finite-
+% difference choices in this model. For reproducible inference, the
+% Hessian is therefore recomputed explicitly at the final optimum using a
+% central finite-difference scheme and a documented relative step size.
+%
+% Parameter-specific steps are:
+%   h_i = relativeStep * max(1, abs(theta_i))
+%
+% A sensitivity check showed stable standard errors around this step size.
+
+relativeStep = ...
+    3e-5;
+
+inferenceHessian = ...
+    finiteDifferenceHessianCentral( ...
+        @negloglike, ...
+        paramhat, ...
+        relativeStep);
+
+inferenceHessian = ...
+    (inferenceHessian + inferenceHessian') ./ 2;
+
+inferenceEigenvalues = ...
+    eig(inferenceHessian);
+
+minimumEigenvalue = ...
+    min(inferenceEigenvalues);
+
+if minimumEigenvalue <= 0
+
+    error([ ...
+        'Finite-difference inference Hessian is not positive definite. ', ...
+        'Minimum eigenvalue: %.6e.'], ...
+        minimumEigenvalue);
+end
+
+covarianceMatrix = ...
+    inferenceHessian \ ...
+    eye(size(inferenceHessian));
+
+covarianceMatrix = ...
+    (covarianceMatrix + covarianceMatrix') ./ 2;
+
+varianceDiagonal = ...
+    diag(covarianceMatrix);
+
+if any(~isfinite(varianceDiagonal)) || ...
+        any(varianceDiagonal <= 0)
+
+    error( ...
+        'Invalid variance estimate from finite-difference Hessian.');
+end
+
+stderr = ...
+    sqrt(varianceDiagonal);
+
+discreteChoiceData.stderr = ...
+    stderr;
+
+discreteChoiceData.inferenceHessian = ...
+    inferenceHessian;
+
+discreteChoiceData.inferenceHessianRelativeStep = ...
+    relativeStep;
+
+discreteChoiceData.inferenceHessianMinEigenvalue = ...
+    minimumEigenvalue;
+
+discreteChoiceData.inferenceHessianConditionNumber = ...
+    cond(inferenceHessian);
+
+
+%% ------------------------------------------------------------------------
+% 5. REPORT ESTIMATION RESULTS
 % -------------------------------------------------------------------------
 
 disp(['McFadden R^2: ', num2str(discreteChoiceData.RSquare)])
 disp(['Negative log-likelihood (estimated): ', num2str(fval)])
 disp(['Negative log-likelihood (null model): ', num2str(discreteChoiceData.nll_0)])
+disp(['Inference Hessian relative step: ', num2str(relativeStep)])
+disp(['Inference Hessian minimum eigenvalue: ', num2str(minimumEigenvalue)])
+disp(['Inference Hessian condition number: ', ...
+      num2str(discreteChoiceData.inferenceHessianConditionNumber)])
+disp(['Gradient'' * inv(Hessian) * Gradient: ', ...
+      num2str(grad' * covarianceMatrix * grad)])
 
-hessianRegularized = ensure_positive_definite(hessian);
-invHessian = inv(hessianRegularized);
-stderr = sqrt(diag(invHessian));
-
-discreteChoiceData.stderr = stderr;
-
-disp(['Gradient'' * inv(Hessian) * Gradient = ', ...
-      num2str(grad' * invHessian * grad)])
 disp(' ')
 disp('ESTIMATION RESULTS')
 disp('----------------------------')
 disp('Parameter        Est         SE        t-stat')
 
 for i = 1:numel(paramhat)
-    fprintf('%-10s %10.4f %10.4f %10.4f\n', ...
+
+    fprintf( ...
+        '%-10s %10.4f %10.4f %10.4f\n', ...
         discreteChoiceSettings.parameterNames{i}, ...
         paramhat(i), ...
         stderr(i), ...
@@ -147,40 +225,114 @@ end
 % LOCAL FUNCTIONS
 % ========================================================================
 
-function hessianRegularized = ensure_positive_definite(hessianMatrix)
-% ENSURE_POSITIVE_DEFINITE
-% Regularize the Hessian until it is positive definite.
+function hessianMatrix = finiteDifferenceHessianCentral( ...
+    objectiveFunction, ...
+    parameterVector, ...
+    relativeStep)
+% FINITEDIFFERENCEHESSIANCENTRAL
+% Central finite-difference Hessian evaluated at parameterVector.
 %
-% INPUT
-%   hessianMatrix : Hessian from the optimizer
-%
-% OUTPUT
-%   hessianRegularized : positive-definite Hessian used for inference
-%
-% NOTE
-% The current implementation applies diagonal ridge regularization with a
-% sequence of increasing epsilon values.
+% Parameter-specific steps are scaled by max(1, abs(theta_i)).
 
-    epsilons = [1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2];
+    theta = ...
+        parameterVector(:);
 
-    if all(eig(hessianMatrix) > 0)
-        disp('Hessian is already positive definite.');
-        hessianRegularized = hessianMatrix;
-        return;
+    nParameter = ...
+        numel(theta);
+
+    step = ...
+        relativeStep .* ...
+        max(1, abs(theta));
+
+    hessianMatrix = ...
+        zeros(nParameter);
+
+    f0 = ...
+        objectiveFunction(theta');
+
+    %% Diagonal terms
+
+    for i = 1:nParameter
+
+        thetaPlus = ...
+            theta;
+
+        thetaMinus = ...
+            theta;
+
+        thetaPlus(i) = ...
+            thetaPlus(i) + step(i);
+
+        thetaMinus(i) = ...
+            thetaMinus(i) - step(i);
+
+        fPlus = ...
+            objectiveFunction(thetaPlus');
+
+        fMinus = ...
+            objectiveFunction(thetaMinus');
+
+        hessianMatrix(i, i) = ...
+            ( ...
+                fPlus - ...
+                2 .* f0 + ...
+                fMinus ...
+            ) ./ ...
+            (step(i) .^ 2);
     end
 
-    for epsValue = epsilons
-        candidate = hessianMatrix + epsValue .* eye(size(hessianMatrix));
+    %% Off-diagonal terms
 
-        if all(eig(candidate) > 0)
-            disp(['Regularized Hessian with epsilon = ', num2str(epsValue)]);
-            hessianRegularized = candidate;
-            return;
+    for i = 1:nParameter
+
+        for j = (i + 1):nParameter
+
+            thetaPP = theta;
+            thetaPM = theta;
+            thetaMP = theta;
+            thetaMM = theta;
+
+            thetaPP([i, j]) = ...
+                thetaPP([i, j]) + ...
+                [step(i); step(j)];
+
+            thetaPM(i) = ...
+                thetaPM(i) + step(i);
+
+            thetaPM(j) = ...
+                thetaPM(j) - step(j);
+
+            thetaMP(i) = ...
+                thetaMP(i) - step(i);
+
+            thetaMP(j) = ...
+                thetaMP(j) + step(j);
+
+            thetaMM([i, j]) = ...
+                thetaMM([i, j]) - ...
+                [step(i); step(j)];
+
+            mixedDerivative = ...
+                ( ...
+                    objectiveFunction(thetaPP') - ...
+                    objectiveFunction(thetaPM') - ...
+                    objectiveFunction(thetaMP') + ...
+                    objectiveFunction(thetaMM') ...
+                ) ./ ...
+                (4 .* step(i) .* step(j));
+
+            hessianMatrix(i, j) = ...
+                mixedDerivative;
+
+            hessianMatrix(j, i) = ...
+                mixedDerivative;
         end
     end
 
-    error('Failed to regularize Hessian to positive definiteness.');
+    hessianMatrix = ...
+        (hessianMatrix + hessianMatrix') ./ 2;
 end
+
 
 function nll = negloglike(paramLogLike)
 % NEGLOGLIKE

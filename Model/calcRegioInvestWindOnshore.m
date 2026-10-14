@@ -1,4 +1,4 @@
-function [resultsWindOnshoreTurbinesUnstack, regioDataWind] = calcRegioInvestWindOnshore()
+function [resultsWindOnshoreTurbinesUnstack, regioDataWind, scenarioSummary] = calcRegioInvestWindOnshore()
 % CALCREGIOINVESTWINDONSHORE
 % Main model routine for regional onshore wind investment simulations.
 %
@@ -147,6 +147,22 @@ switch paraSimYear
         error('Invalid simulation year. Supported values are 2030, 2035, and 2040.');
 end
 
+scenarioSummary = ...
+    struct();
+
+scenarioSummary.baseYear = ...
+    paraRegioInvest.baseYear;
+
+scenarioSummary.simYear = ...
+    paraSimYear;
+
+scenarioSummary.expansionCase = ...
+    paraExpansionCase;
+
+scenarioSummary.targetCapacity_GW = ...
+    targetCapacityGermanyMW ./ 1000;
+
+
 %% ------------------------------------------------------------------------
 % 8. LOAD WEATHER DATA
 % -------------------------------------------------------------------------
@@ -258,6 +274,27 @@ switch paraExpansionCase
             rethrow(lastError);
         end
 
+        % Store estimation results required for Table 2.
+        scenarioSummary.discreteChoiceEstimation = ...
+            struct();
+
+        scenarioSummary.discreteChoiceEstimation.parameterNames = ...
+            string( ...
+                discreteChoiceModel.discreteChoiceParam.Properties.VariableNames)';
+
+        scenarioSummary.discreteChoiceEstimation.estimates = ...
+            table2array( ...
+                discreteChoiceModel.discreteChoiceParam)';
+
+        scenarioSummary.discreteChoiceEstimation.standardErrors = ...
+            discreteChoiceModel.stderr(:);
+
+        scenarioSummary.discreteChoiceEstimation.pseudoR2 = ...
+            discreteChoiceModel.RSquare;
+
+        scenarioSummary.discreteChoiceEstimation.nrDecisionMaker = ...
+            discreteChoiceModel.nrDecisionMaker;
+
         % Step 6: Prepare technology/economic parameters for prediction.
         paraTech.paraCompensation          = paraCompensation;
         paraTech.paraInterestRate          = paraInterestRate;
@@ -280,7 +317,7 @@ switch paraExpansionCase
         end
 
         % Step 7: Predict future investment.
-        [regioResults, ~, ~] = estimateInvestmentDecision( ...
+        [regioResults, ~, ~, resultsScaling] = estimateInvestmentDecision( ...
             discreteChoiceModel, ...
             regioWindOnshore, ...
             targetCapacityGermanyMW, ...
@@ -292,6 +329,26 @@ switch paraExpansionCase
             paraOPEXperkWhvar, ...
             paraRegioInvest, ...
             optsRegioInvest);
+
+        idxCurrentPolicy = ...
+            find( ...
+                abs(resultsScaling.scaleRefYield - 1.0) < 1e-12, ...
+                1, ...
+                'first');
+
+        if isempty(idxCurrentPolicy)
+
+            error('No s = 1 result available for the scenario summary.');
+        end
+
+        scenarioSummary.requiredRemuneration_ctperkWh = ...
+            resultsScaling.requiredRemuneration_ctperkWh(idxCurrentPolicy);
+
+        scenarioSummary.productionWeightedRemuneration_ctperkWh = ...
+            resultsScaling.productionWeightedRemuneration_ctperkWh(idxCurrentPolicy);
+
+        scenarioSummary.annualGeneration_TWh = ...
+            resultsScaling.annualGeneration_TWh(idxCurrentPolicy);
 
     case 2
         %% =================================================================
@@ -465,12 +522,11 @@ switch paraExpansionCase
                 filenameDistSea, regioWindOnshore, turbineParameter);
         end
 
-        if optsReferenceYieldModel
-            regioWindOnshore.compensationFactor = calcTurbineCompensationFactor( ...
-                regioWindOnshore, optsUniqueRefYieldPerRegion);
-        else
-            regioWindOnshore.compensationFactor = ones(height(regioWindOnshore), 1);
-        end
+        % Case C is a pure NPV merit-order benchmark. It therefore
+        % abstracts from the reference-yield mechanism and evaluates
+        % investment opportunities under uniform remuneration.
+        regioWindOnshore.compensationFactor = ...
+            ones(height(regioWindOnshore), 1);
 
         regioWindOnshore.investCost = applyCostReduction( ...
             regioWindOnshore.investCost, ...
@@ -657,6 +713,9 @@ regioDataWind.capacity_baseYear = capBaseYear.sum_capacitiesBaseYear;
 regioDataWind.exhaustionProb = ...
     ((regioDataWind.capacityTotal ./ 1000) ./ 22.5) ./ ...
     (regioDataWind.relativeAvailableWindSpace .* regioDataWind.totalArea);
+
+scenarioSummary.installedCapacity_GW = ...
+    sum(regioDataWind.capacityTotal) ./ 1e6;
 
 end
 
@@ -858,7 +917,11 @@ function outputPastInvestments = generateRegioWindonshore( ...
             'capacitiesBaseYear', 'capacitiesDiscreteChoice', 'capacitiesInSimYear'});
 
     if paraExpansionCase == 4
-        optsScaleAreaParameter = optsScaleAreaInvest;
+        % Case C is the pure NPV merit-order benchmark. It abstracts from
+        % policy-induced land quotas (including WindBG scaling) while
+        % retaining the underlying technical exclusion-area constraint.
+        % Therefore use the unscaled technically eligible wind area.
+        optsScaleAreaParameter = 'none';
     end
 
     switch optsScaleAreaParameter
@@ -1137,8 +1200,8 @@ function outputCompensationFactor = calcTurbineCompensationFactor(inpPastInvestm
 
     inSouth = ismember(windparkLocal.nutsID, NUTS3_Suedregion);
 
-    x = [0.50 0.60 0.70 0.80 0.90 1.00 1.10 1.20 1.30 1.40 1.50];
-    y = [1.55 1.42 1.29 1.16 1.07 1.00 0.94 0.89 0.85 0.81 0.79];
+    [x, y] = ...
+        getReferenceYieldSchedule();
 
     referenceFactor(inSouth) = max(referenceFactor(inSouth), 0.5);
     referenceFactor(~inSouth) = max(referenceFactor(~inSouth), 0.6);

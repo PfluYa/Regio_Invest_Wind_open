@@ -1,0 +1,193 @@
+%% FIGURE 2: SPATIAL DEPLOYMENT UNDER CURRENT POLICY
+% Four panels: base year 2024, 2030, 2035, and 2040.
+% Capacity density is reported in kW per km^2.
+
+scriptPath = mfilename('fullpath');
+scriptFolder = fileparts(scriptPath);
+repoFolder = fileparts(scriptFolder);
+resultsFolder = fullfile(repoFolder, 'Results Paper');
+
+file2030 = fullfile( ...
+    resultsFolder, ...
+    'results_nuts3_base2024_target2030_expCase1_capacity.mat');
+
+file2035 = fullfile( ...
+    resultsFolder, ...
+    'results_nuts3_base2024_target2035_expCase1_capacity.mat');
+
+file2040 = fullfile( ...
+    resultsFolder, ...
+    'results_nuts3_base2024_target2040_expCase1_capacity.mat');
+
+requiredFiles = {file2030, file2035, file2040};
+
+for iFile = 1:numel(requiredFiles)
+    if ~isfile(requiredFiles{iFile})
+        error('Required result file not found: %s', requiredFiles{iFile});
+    end
+end
+
+S2030 = load(file2030, 'selected_data', 'scenarioSummary');
+S2035 = load(file2035, 'selected_data', 'scenarioSummary');
+S2040 = load(file2040, 'selected_data', 'scenarioSummary');
+
+data2030 = alignToReference(S2030.selected_data, S2040.selected_data);
+data2035 = alignToReference(S2035.selected_data, S2040.selected_data);
+data2040 = S2040.selected_data;
+
+baseDensity = data2040.capacity_baseYear ./ data2040.totalArea;
+density2030 = data2030.capPerKm2;
+density2035 = data2035.capPerKm2;
+density2040 = data2040.capPerKm2;
+
+rem2030 = S2030.scenarioSummary.requiredRemuneration_ctperkWh;
+rem2035 = S2035.scenarioSummary.requiredRemuneration_ctperkWh;
+rem2040 = S2040.scenarioSummary.requiredRemuneration_ctperkWh;
+
+binEdges = [-Inf, 0, 100:100:1500, Inf];
+
+blueMap = [ ...
+    0.82 0.82 0.82; ...
+    0.93 0.97 1.00; ...
+    0.86 0.94 0.99; ...
+    0.77 0.89 0.97; ...
+    0.67 0.84 0.94; ...
+    0.56 0.78 0.91; ...
+    0.44 0.71 0.87; ...
+    0.33 0.64 0.82; ...
+    0.24 0.56 0.77; ...
+    0.17 0.48 0.70; ...
+    0.12 0.40 0.63; ...
+    0.08 0.33 0.56; ...
+    0.05 0.27 0.49; ...
+    0.03 0.21 0.42; ...
+    0.02 0.16 0.34; ...
+    0.01 0.12 0.27; ...
+    0.00 0.08 0.20 ...
+    ];
+
+if size(blueMap, 1) ~= numel(binEdges) - 1
+    error('The map palette and bin definition are inconsistent.');
+end
+
+fig = figure( ...
+    'Position', [100 80 980 900], ...
+    'Color', 'w');
+
+layout = tiledlayout( ...
+    2, 2, ...
+    'TileSpacing', 'compact', ...
+    'Padding', 'compact');
+
+ax1 = nexttile(layout, 1);
+plotRegionalPanel(ax1, data2040, baseDensity, blueMap, binEdges);
+title(ax1, '(a) base year (2024)');
+
+ax2 = nexttile(layout, 2);
+plotRegionalPanel(ax2, data2030, density2030, blueMap, binEdges);
+title(ax2, sprintf('(b) 115 GW (2030): %.2f ct/kWh', rem2030));
+
+ax3 = nexttile(layout, 3);
+plotRegionalPanel(ax3, data2035, density2035, blueMap, binEdges);
+title(ax3, sprintf('(c) 157 GW (2035): %.2f ct/kWh', rem2035));
+
+ax4 = nexttile(layout, 4);
+plotRegionalPanel(ax4, data2040, density2040, blueMap, binEdges);
+title(ax4, sprintf('(d) 160 GW (2040): %.2f ct/kWh', rem2040));
+
+legendLabels = { ...
+    '= 0', '> 0', '> 100', '> 200', '> 300', '> 400', '> 500', ...
+    '> 600', '> 700', '> 800', '> 900', '> 1000', '> 1100', ...
+    '> 1200', '> 1300', '> 1400', '> 1500'};
+
+legendHandles = gobjects(size(blueMap, 1), 1);
+
+hold(ax2, 'on');
+
+for iColor = 1:size(blueMap, 1)
+    legendHandles(iColor) = plot( ...
+        ax2, nan, nan, 's', ...
+        'MarkerSize', 7, ...
+        'MarkerFaceColor', blueMap(iColor, :), ...
+        'MarkerEdgeColor', [0.35 0.35 0.35]);
+end
+
+legend( ...
+    ax2, ...
+    legendHandles, ...
+    legendLabels, ...
+    'Location', 'eastoutside', ...
+    'FontSize', 8);
+
+outputFile = fullfile( ...
+    resultsFolder, ...
+    'Figure_2_spatial_deployment.pdf');
+
+exportgraphics( ...
+    fig, ...
+    outputFile, ...
+    'ContentType', 'vector');
+
+fprintf('Figure 2 saved to:\n%s\n', outputFile);
+
+
+%% ========================================================================
+% LOCAL FUNCTIONS
+% ========================================================================
+
+function aligned = alignToReference(data, reference)
+
+[isMatched, idx] = ismember(reference.nutsID, data.nutsID);
+
+if any(~isMatched)
+    error('Mismatch in NUTS3 IDs across simulation years.');
+end
+
+aligned = data(idx, :);
+
+end
+
+
+function plotRegionalPanel(ax, regioData, values, colorMap, binEdges)
+
+hold(ax, 'on');
+
+for iRegion = 1:height(regioData)
+
+    regionShape = polyshape( ...
+        regioData.lonPoly{iRegion}, ...
+        regioData.latPoly{iRegion});
+
+    value = values(iRegion);
+
+    if isnan(value)
+        faceColor = [0.65 0.65 0.65];
+    else
+        bin = discretize(value, binEdges);
+        if isnan(bin)
+            bin = 1;
+        end
+        faceColor = colorMap(bin, :);
+    end
+
+    plot( ...
+        ax, ...
+        regionShape, ...
+        'FaceColor', faceColor, ...
+        'FaceAlpha', 1, ...
+        'EdgeColor', [0.50 0.50 0.50], ...
+        'LineWidth', 0.25);
+end
+
+axis(ax, 'equal');
+axis(ax, 'off');
+
+xlim(ax, ...
+    [min(regioData.lonPoint) - 0.3, ...
+     max(regioData.lonPoint) + 0.3]);
+
+ylim(ax, ...
+    [min(regioData.latPoint) - 0.3, ...
+     max(regioData.latPoint) + 0.3]);
+
+end

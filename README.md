@@ -1,209 +1,469 @@
-# The impact of investor choices on the future spatial development of onshore wind energy
+# RegioInvest Wind
 
-## Overview
+Replication code for:
 
-**RegioInvest Wind** is a MATLAB-based model for simulating regional onshore wind power deployment in Germany.  
-The model projects future capacity expansions across NUTS-3 regions and turbine types under different allocation strategies and regulatory settings.
+> **Spatially differentiated renewable subsidies: Good for ratepayers and bad for investors? Empirical evidence from Onshore Wind in Germany**  
+> Yannik Pflugfelder and Christoph Weber
 
-It supports scenario-based energy system analysis and policy evaluation by integrating:
-- geospatial constraints,
-- investment economics, and
-- historical turbine data.
+**RegioInvest Wind** is a MATLAB model of regional onshore-wind investment in Germany. It combines NUTS-3 geospatial data, wind yields, land availability, investment economics, turbine choice, and a nested-logit investment model. The replication code also evaluates counterfactual versions of the German reference-yield mechanism under capacity-based and energy-based policy targets.
 
-Key use cases include:
-- Calculation of wind energy allocation under spatial constraints  
-- Comparison of policy mechanisms (e.g. reference yield model, compensation design)  
-- Analysis of regional differences in expansion patterns  
-
-Find methodological details in the following paper: **DOI tba**
+The paper DOI will be added after publication.
 
 ---
 
-## Main entry point
+## 1. Quick start
+
+For a single model run, edit the configuration in:
+
+```matlab
+main_regio_invest.m
+```
+
+and run the script from MATLAB.
+
+For the paper replication, run:
+
+```matlab
+run_paper_replication.m
+```
+
+If the model results already exist and only tables/figures need to be
+regenerated, run:
+
+```matlab
+regenerate_paper_outputs.m
+```
+
+
+The paper-replication script sets the random-number seed to a fixed value, executes the required scenarios, saves the model results, and generates the model-based paper figures.
+
+No machine-specific repository path needs to be entered manually.
+
+---
+
+## 2. Repository structure
+
+The intended repository structure is:
+
+```text
+RegioInvestWind/
+│
+├── main_regio_invest.m
+├── run_regio_invest_scenario.m
+├── run_paper_replication.m
+├── validate_paper_replication.m
+├── README.md
+├── DEPENDENCY_AUDIT.md
+├── LICENSE
+├── CITATION.cff
+├── .gitignore
+│
+├── Model/
+│   ├── calcRegioInvestWindOnshore.m
+│   ├── estimateInvestmentDecision.m
+│   ├── estimateLogitParameter.m
+│   ├── initLogitParameter.m
+│   ├── calcNetPresentValue.m
+│   ├── transformNPV.m
+│   ├── adaptPercentageWind.m
+│   ├── energyYieldCorrectionYP.m
+│   ├── getGeoShapeData.m
+│   ├── getSpacePotential.m
+│   ├── getReferenceYieldSchedule.m
+│   │
+│   ├── plot_spatial_deployment.m
+│   ├── plot_turbine_types.m
+│   ├── plot_results.m
+│   ├── plot_allocation_comparison.m
+│   ├── plot_reference_yield_schedule.m
+│   ├── plot_ref_yield_diff.m
+│   ├── plot_capacity_vs_energy_based_refYield.m
+│   └── plot_probability_vs_npv_producer_surplus.m
+│
+├── Input_Data/
+│   └── ...
+│
+└── Results Paper/
+    └── model results and generated paper figures
+```
+
+`Results Paper/` is created automatically if it does not yet exist.
+
+MATLAB autosave files (`*.asv`), old dated plotting variants, and obsolete versions of model files are not part of the replication workflow.
+
+---
+
+## 3. Main entry points
 
 ### `main_regio_invest.m`
 
-This script is the central control file of the model.  
-All simulations are configured and executed from here.
+Convenience script for an individual model run. The main scenario settings are collected in a `config` struct and passed to `run_regio_invest_scenario.m`.
+
+Example:
+
+```matlab
+config.simYear = 2040;
+config.expansionCase = 1;
+config.iterationLogicInvestment = 'capacity';
+config.RefYieldInInvestment = true;
+config.runReferenceYieldSensitivity = false;
+config.randomSeed = 1;
+```
+
+For an ordinary regional run, `runReferenceYieldSensitivity = false` evaluates only the current-policy case `s = 1`.
+
+### `run_regio_invest_scenario.m`
+
+Runs one reproducible model scenario. It:
+
+- determines the repository path automatically;
+- adds the repository to the MATLAB path;
+- sets the random-number seed;
+- initializes model parameters and geospatial inputs;
+- calls `calcRegioInvestWindOnshore.m`;
+- saves regional outputs and a compact scenario summary.
+
+### `run_paper_replication.m`
+
+Runs the model scenarios used for the paper and then calls the dedicated plotting scripts.
+
+The expensive reference-yield sensitivity grid is evaluated only for the 2040 nested-logit policy experiments for which it is required.
+
+
+At the end of the run, `validate_paper_replication.m` checks that all required
+result files and figures are present, verifies the reference-yield grids and
+the current-policy consistency of the two target regimes, and reports the
+synthetic-net-benefit maxima and Table-2 fit statistic.
 
 ---
 
-## How to use
+## 4. Expansion cases
 
-1. Clone this repository to your local machine  
-2. Download and prepare the required input data (see below)  
-3. Adjust settings in `main_regio_invest.m`  
-4. Run the script in MATLAB  
-5. Visualize results using the provided plotting scripts or export shapefiles for external tools (e.g. QGIS)
+The model supports four allocation logics through `expansionCase`:
 
----
+| Case | Model logic | Role in the paper |
+|---|---|---|
+| 1 | Nested-logit / choice-based investment | Main model |
+| 2 | Capacity proportional to existing capacity | Available in the model, not used in the final paper comparison |
+| 3 | Capacity proportional to remaining available land | Figure 4 benchmark |
+| 4 | NPV merit-order allocation using technically eligible land but no WindBG land-quota scaling and no reference-yield remuneration differentiation | Figure 4 benchmark |
 
-## Input data requirements
+The final paper comparison in Figure 4 labels these as:
 
-Due to licensing restrictions, input files are not completely included.  
-The following datasets are required:
-
-### Turbine Data (MaStR)
-
-This repository includes data derived from the **Marktstammdatenregister (MaStR)** of the German Federal Network Agency (Bundesnetzagentur).
-
-- Source: https://www.marktstammdatenregister.de (accessed on 24.03.2025)  
-- Legal basis: §111e EnWG  
-- License: Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)  
-- License text: https://www.govdata.de/dl-de/by-2-0  
-
-Modifications:
-- Filtered for onshore wind turbines in Germany  
-- Commissioning date before 01.01.2025  
-- Cleaned, filtered, and aggregated by the authors  
-
-A reduced example dataset is included for testing.
+- **Case A**: Case 1, nested-logit investment;
+- **Case B**: Case 3, proportional to available land;
+- **Case C**: Case 4, NPV merit order.
 
 ---
 
-### ERA5 Weather Data (not redistributed)
+## 5. Reference-yield policy experiments
 
-- Source: Copernicus Climate Data Store (CDS)  
-- DOI: https://doi.org/10.24381/cds.adbb2d47  
+The reference-yield correction schedule is stored centrally in:
 
-Required variables:
-- `u10`, `v10`, `u100`, `v100`
+```matlab
+Model/getReferenceYieldSchedule.m
+```
 
-Specifications:
-- Format: NetCDF (`.nc`)  
-- Temporal resolution: hourly  
-- Spatial resolution: 0.25° grid  
+Counterfactual correction factors are constructed as
 
-Download:
-ERA5 data must be obtained directly from the CDS portal:  
-https://cds.climate.copernicus.eu  
+```text
+corr(s) = 1 + s * (corr(1) - 1)
+```
 
-Users should select:
-- variables: `u10`, `v10`, `u100`, `v100`  
-- full-year hourly data  
-- spatial domain covering Germany  
+where:
 
----
+- `s = 0` gives uniform remuneration;
+- `s = 1` reproduces the current reference-yield mechanism;
+- `s > 1` strengthens spatial differentiation.
 
-### Power Curve Data (included)
+The full sensitivity analysis uses:
 
-- CSV or MATLAB file with turbine-specific power curves  
-- Based on:  
-  Pöstges & Weber (2023), *Energy Economics*  
-  https://doi.org/10.1016/j.eneco.2023.106534  
+```matlab
+scaleVec = 0:0.005:1.7;
+```
 
----
+Two policy-target logics are implemented:
 
-### Geodata (included)
+- **capacity-based**: remuneration is calibrated to the installed-capacity target;
+- **energy-based**: remuneration is calibrated to annual generation under the current-policy (`s = 1`) capacity equilibrium.
 
-- NUTS-3 region polygons and centroids  
-- Source: European Union, GISCO (2021)  
-- License: CC BY 4.0  
-
-Includes:
-- region geometries  
-- centroids  
-- land-use exclusion zones  
+The energy target is therefore derived internally rather than hard-coded.
 
 ---
 
-## Scenario configuration
+## 6. Probability-based policy evaluation
 
-The model supports four expansion cases, controlled via  
-`paraRegioInvest.expansionCase`:
+For the reference-yield counterfactuals, the model constructs a synthetic investment response from the estimated nested-logit probabilities.
 
-- **Case 1**: Discrete choice model (nested logit) – baseline methodology  
-- **Case 2**: Allocation proportional to existing capacity  
-- **Case 3**: Allocation proportional to available land  
-- **Case 4**: Merit-order optimization based on NPV  
+At every counterfactual base-remuneration level, the synthetic fleet is mapped into its production-weighted effective remuneration. Probability-based producer surplus is calculated as the area under synthetic generation in this effective-remuneration space.
 
-Key parameters:
+The associated probability-based synthetic net benefit combines:
 
-- `baseYear` – reference year for turbine data  
-- `simYear` – target year for projected capacity  
-- `RefYieldInInvestment` – application of EEG §36h compensation logic  
+- probability-based producer surplus;
+- support payments; and
+- avoided fuel and CO2 costs of displaced gas-fired generation.
 
----
+These probability-based quantities are behaviorally based synthetic policy-evaluation measures. They are not exact money-metric compensating-variation measures.
 
-## Methodological highlights
+The code additionally reports:
 
-- **Nested logit model (Case 1)**  
-  Estimates turbine investment choices based on relative profitability  
+- an NPV-based producer-surplus benchmark; and
+- a resource-cost-based welfare benchmark.
 
-- **Wind yield estimation**  
-  Based on ERA5 reanalysis data  
-
-- **Bias correction of wind yields**  
-  Following Pflugfelder et al. (2025):  
-  https://doi.org/10.1016/j.apenergy.2024.122890  
-
-- **Spatial constraints**  
-  Expansion limited by available land and existing installations  
-
-- **Net Present Value (NPV)**  
-  Includes CAPEX, OPEX, compensation, and discounting  
-
-- **NPV transformation**  
-  Uses an `asinh` transformation (see `transformNPV.m`)  
-  to include both positive and negative values symmetrically  
-
-- **Reference yield adjustment**  
-  Enables analysis of spatial allocation and economic efficiency  
-  under alternative policy designs  
+The formal construction is documented in the paper appendix.
 
 ---
 
-## Outputs
+## 7. Paper replication: scenarios and outputs
 
-The model generates `.mat` files in the `Results/` folder.
+`run_paper_replication.m` currently executes the following model scenarios:
 
-Key output variables:
+| Simulation | Expansion case | Policy target | Reference-yield sensitivity |
+|---|---:|---|---|
+| 2030 | 1 | Capacity | No, `s = 1` only |
+| 2035 | 1 | Capacity | No, `s = 1` only |
+| 2040 | 3 | Capacity | No |
+| 2040 | 4 | Capacity | No |
+| 2040 | 1 | Capacity | No reference-yield differentiation |
+| 2040 | 1 | Capacity | Full `s` grid |
+| 2040 | 1 | Energy | Full `s` grid |
 
-- `capacityTotal` – Installed capacity per region (MW)  
-- `capPerKm2` – Capacity density (total area)  
-- `capPerKm2avail` – Capacity density (available area)  
-- `capacityToAdd` – Net capacity expansion relative to base year  
-- `exhaustionProb` – Degree of land-use saturation  
+The 2040 nested-logit capacity-sensitivity run also supplies the current-policy (`s = 1`) regional baseline used by several paper outputs.
 
----
+### Mapping from code to paper outputs
 
-## Reproducibility
+| Paper output | Replication source |
+|---|---|
+| Table 2: nested-logit estimates | `estimateLogitParameter.m` + `write_table2_estimation_results.m` |
+| Figure 2: spatial deployment 2024/2030/2035/2040 | `plot_spatial_deployment.m` |
+| Figure 3: installed capacity by turbine type | `plot_turbine_types.m` and `plot_results.m` |
+| Figure 4: allocation strategies by federal state | `plot_allocation_comparison.m` |
+| Figure 5: reference-yield correction schedules | `plot_reference_yield_schedule.m` |
+| Figure 6: regional effect of removing the reference-yield mechanism | `plot_ref_yield_diff.m` |
+| Table 3: alternative reference-yield scaling | `estimateInvestmentDecision.m` |
+| Figure 7: continuous reference-yield comparative statics | `plot_capacity_vs_energy_based_refYield.m` |
+| Figure 9: probability-based vs. NPV-based producer surplus | `plot_probability_vs_npv_producer_surplus.m` |
 
-A full replication dataset (including processed input data and model results) is available via Zenodo:
+Figure 1 is a conceptual model diagram rather than a direct simulation output.
 
-**DOI: [Zenodo](https://doi.org/10.5281/zenodo.17062160)**
-
-This dataset includes:
-- processed MaStR data  
-- model outputs (`.mat` and `.xlsx`)  
-- additional input data where redistribution is permitted  
-
----
-
-## License
-
-The source code in this repository is licensed under the MIT License.
-
-Input data are subject to their respective original licenses:
-
-- MaStR (Marktstammdatenregister):  
-  Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)
-
-- ERA5 weather data:  
-  Copernicus Climate Data Store (CDS) license  
-  (not redistributed in this repository)
-
-- Geospatial data (NUTS regions):  
-  © European Union, GISCO — licensed under CC BY 4.0
-
-Users are responsible for complying with the respective data licenses when using external datasets.
+Figure 8 is an illustrative GIS-input figure showing exclusion and suitable wind areas and is not generated by the core model-replication script.
 
 ---
 
-## Contact
+## 8. Result files
+
+Regional simulation results are saved in `Results Paper/` using descriptive filenames such as:
+
+```text
+results_nuts3_base2024_target2030_expCase1_capacity.mat
+results_nuts3_base2024_target2035_expCase1_capacity.mat
+results_nuts3_base2024_target2040_expCase1_capacity.mat
+results_nuts3_base2024_target2040_expCase3_capacity.mat
+results_nuts3_base2024_target2040_expCase4_capacity.mat
+results_nuts3_base2024_target2040_expCase1_capacity_no_reference_yield.mat
+```
+
+Each regional result file contains:
+
+- `selected_data`: NUTS-3 result table;
+- `resultsWindOnshoreTurbinesUnstack`: installed capacity by turbine type and region;
+- `scenarioSummary`: compact scenario-level statistics;
+- `scenarioConfig`: configuration used for the run.
+
+The two reference-yield sensitivity runs additionally produce:
+
+```text
+Results_scaling_capacity_based.mat
+Results_scaling_energy_based.mat
+```
+
+These files contain the continuous counterfactual results used in Table 3 and Figure 7. The capacity-based file also contains the diagnostics used for Figure 9.
+
+Generated figures are written to `Results Paper/` as vector PDFs.
+
+---
+
+## 9. Model output variables
+
+Important regional output fields include:
+
+- `capacityTotal`: installed capacity by NUTS-3 region;
+- `capPerKm2`: installed capacity per square kilometre of total area;
+- `capPerKm2avail`: installed capacity per available wind area;
+- `capacityToAdd`: capacity expansion relative to the simulation-year starting fleet;
+- `capacity_baseYear`: base-year capacity;
+- `exhaustionProb`: land-use saturation indicator.
+
+The reference-yield sensitivity output contains the variables required for the final paper, including:
+
+- installed capacity;
+- annual generation;
+- base remuneration;
+- production-weighted effective remuneration;
+- annual support payments;
+- avoided fuel and CO2 costs;
+- probability-based producer surplus;
+- probability-based synthetic net benefit;
+- NPV-based producer surplus benchmark;
+- resource-cost-based welfare benchmark;
+- North, Neutral, and South capacity totals.
+
+---
+
+## 10. Input data requirements
+
+Some source datasets cannot be redistributed in full because of licensing restrictions.
+
+### Turbine data: Marktstammdatenregister (MaStR)
+
+The model uses turbine data derived from the German Federal Network Agency's Marktstammdatenregister.
+
+- Source: https://www.marktstammdatenregister.de
+- Access date used for the replication data: 24 March 2025
+- Legal basis: §111e EnWG
+- License: Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)
+- License text: https://www.govdata.de/dl-de/by-2-0
+
+The authors filter the data for German onshore wind turbines, restrict commissioning dates to the relevant historical sample, and clean and aggregate the records for the model.
+
+### ERA5 weather data
+
+ERA5 data are not redistributed with the repository.
+
+- Source: Copernicus Climate Data Store
+- DOI: https://doi.org/10.24381/cds.adbb2d47
+- Variables used: `u10`, `v10`, `u100`, `v100`
+- Temporal resolution: hourly
+- Spatial resolution: 0.25 degrees
+
+Users must download the required ERA5 data directly from the Copernicus Climate Data Store:
+
+https://cds.climate.copernicus.eu
+
+### Power curves
+
+The turbine-specific power-curve data are based on:
+
+Pöstges & Weber (2023), *Energy Economics*  
+https://doi.org/10.1016/j.eneco.2023.106534
+
+### Geodata
+
+The model uses NUTS-3 polygons and centroids from European Union GISCO (2021), together with the land-availability inputs required by the spatial model.
+
+GISCO data are licensed under CC BY 4.0.
+
+---
+
+## 11. MATLAB requirements
+
+The replication is written in MATLAB.
+
+The code uses functionality including:
+
+- `fminunc` for nested-logit estimation;
+- shapefile and geospatial functions such as `shaperead`, `areaint`, and `referenceEllipsoid`;
+- tables and grouped summaries;
+- `polyshape` for generated maps;
+- `exportgraphics` for vector figure output.
+
+Accordingly, the workflow requires MATLAB together with the toolboxes providing the optimization and mapping functionality used by these routines.
+
+---
+
+
+### Parameter-estimation inference
+
+Parameter estimates are obtained by maximum likelihood using `fminunc`.
+For reproducible inference, standard errors are based on a central
+finite-difference Hessian recomputed at the final optimum. The
+parameter-specific perturbation is
+
+```text
+h_i = 3e-5 * max(1, abs(theta_i)).
+```
+
+The covariance matrix is the inverse of this positive-definite inference
+Hessian. This avoids relying on the optimizer's internally generated
+numerical Hessian, whose curvature estimates were found to be sensitive to
+numerical settings for this model.
+
+---
+
+## 12. Reproducibility
+
+The scenario runner uses:
+
+```matlab
+rng(1, 'twister');
+```
+
+by default, making random initialization of the parameter estimation reproducible.
+
+A complete paper replication is computationally more demanding than a standard regional run because the capacity- and energy-based policy experiments evaluate the full reference-yield grid.
+
+For ordinary model use, keep:
+
+```matlab
+config.runReferenceYieldSensitivity = false;
+```
+
+to evaluate only the current-policy equilibrium.
+
+
+
+A replication dataset with processed inputs and model results is available through Zenodo:
+
+https://doi.org/10.5281/zenodo.17062160
+
+Users should consult the archive and the individual source-data licenses for redistribution restrictions.
+
+---
+
+## 13. Dependency audit
+
+`DEPENDENCY_AUDIT.md` documents the model files retained in the final replication workflow and identifies legacy files that are not required.
+
+In particular, the clean replication does **not** require:
+
+- MATLAB autosave files (`*.asv`);
+- old dated plotting scripts;
+- old versions of `estimateInvestmentDecision.m`;
+- `resultScriptShapefile.m`.
+
+The latter was a legacy shapefile-export utility and is not needed to reproduce a final paper output.
+
+---
+
+## 14. License
+
+The source code is licensed under the MIT License.
+
+Input data remain subject to their original licenses, including:
+
+- MaStR: Data licence Germany – attribution – Version 2.0;
+- ERA5: Copernicus Climate Data Store terms;
+- GISCO: CC BY 4.0.
+
+Users are responsible for complying with the respective licenses for external datasets.
+
+---
+
+## 15. Citation
+
+Please cite the paper when using the model. The final publication DOI will be added to `CITATION.cff` and this README after publication.
+
+For the replication archive, see:
+
+https://doi.org/10.5281/zenodo.17062160
+
+---
+
+## 16. Contact
 
 **Yannik Pflugfelder**  
-University of Duisburg-Essen  
 House of Energy, Climate and Finance  
+University of Duisburg-Essen  
+Germany
 
-📧 yannik.pflugfelder@uni-due.de
+Email: yannik.pflugfelder@uni-due.de
