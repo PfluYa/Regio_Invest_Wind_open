@@ -16,8 +16,6 @@ The replication archive is available at:
 
 https://doi.org/10.5281/zenodo.17062160
 
-The publication DOI can be added after publication.
-
 ---
 
 ## 1. Quick start
