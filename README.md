@@ -183,11 +183,6 @@ where:
 - `s = 1` reproduces the current mechanism; and
 - `s > 1` strengthens spatial differentiation.
 
-The sensitivity analysis uses:
-
-```matlab
-scaleVec = 0:0.005:1.7;
-```
 
 Two target logics are evaluated:
 
@@ -238,20 +233,6 @@ The formal construction is documented in Appendix VIII.E of the paper.
 
 The nested-logit parameters are estimated by maximum likelihood using
 `fminunc`.
-
-For reproducible inference, the final standard errors are based on a central
-finite-difference Hessian recomputed at the estimated optimum. For parameter
-`theta_i`, the perturbation is
-
-```text
-h_i = 3e-5 * max(1, abs(theta_i))
-```
-
-and the covariance matrix is the inverse of this positive-definite inference
-Hessian.
-
-This avoids relying on the optimizer's internally generated numerical Hessian,
-whose curvature estimates were sensitive to numerical settings for this model.
 
 ---
 
