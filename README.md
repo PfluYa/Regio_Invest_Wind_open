@@ -181,11 +181,6 @@ where:
 - `s = 1` reproduces the current mechanism; and
 - `s > 1` strengthens spatial differentiation.
 
-The sensitivity analysis uses:
-
-```matlab
-scaleVec = 0:0.005:1.7;
-```
 
 Two target logics are evaluated:
 
@@ -236,20 +231,6 @@ The formal construction is documented in Appendix VIII.E of the paper.
 
 The nested-logit parameters are estimated by maximum likelihood using
 `fminunc`.
-
-For reproducible inference, the final standard errors are based on a central
-finite-difference Hessian recomputed at the estimated optimum. For parameter
-`theta_i`, the perturbation is
-
-```text
-h_i = 3e-5 * max(1, abs(theta_i))
-```
-
-and the covariance matrix is the inverse of this positive-definite inference
-Hessian.
-
-This avoids relying on the optimizer's internally generated numerical Hessian,
-whose curvature estimates were sensitive to numerical settings for this model.
 
 ---
 
@@ -378,14 +359,40 @@ Network Agency's Marktstammdatenregister (MaStR).
 - License: Data licence Germany – attribution – Version 2.0 (DL-DE-BY-2.0)
 - License text: https://www.govdata.de/dl-de/by-2-0
 
-### ERA5
+### ERA5 weather data
 
-ERA5 weather data are obtained from the Copernicus Climate Data Store.
+ERA5 weather files are not redistributed with this replication package due
+to their size. They can be downloaded directly from the Copernicus Climate
+Data Store (ERA5 hourly data on single levels).
 
-- DOI: https://doi.org/10.24381/cds.adbb2d47
-- Variables used: `u10`, `v10`, `u100`, `v100`
-- Temporal resolution: hourly
-- Spatial resolution: 0.25 degrees
+Source DOI:
+https://doi.org/10.24381/cds.adbb2d47
+
+The default paper replication uses the years 2015–2024.
+
+Required variables:
+- 10 m u-component of wind (`u10`)
+- 10 m v-component of wind (`v10`)
+- 100 m u-component of wind (`u100`)
+- 100 m v-component of wind (`v100`)
+
+Temporal resolution:
+- hourly
+
+Spatial resolution:
+- 0.25 degrees
+- the downloaded domain must cover Germany and all NUTS-3 centroids used by
+  the model
+
+Files must be stored in `Input_Data/` using the following naming convention:
+
+ERA5_data_windspeed_2015.nc
+ERA5_data_windspeed_2016.nc
+...
+ERA5_data_windspeed_2024.nc
+
+The MATLAB code reads the NetCDF variables `u10`, `v10`, `u100`, `v100`,
+`latitude`, and `longitude` directly from these files.
 
 ### Power curves
 
